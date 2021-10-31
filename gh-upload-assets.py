@@ -4,6 +4,7 @@ import argparse
 import logging
 import os
 import json
+import mimetypes
 import sys
 
 from urllib.parse import urljoin
@@ -108,6 +109,13 @@ def get_files_from_dir(dir_name: str) -> List[str]:
     return [os.path.join(dir_name, f) for f in os.listdir(dir_name) if os.path.isfile(os.path.join(dir_name, f))]
 
 
+def detect_mimetype(file_path: str) -> str:
+    guessed = mimetypes.guess_type(file_path)[0]
+    if not guessed:
+        return "application/octet-stream"
+    return guessed
+
+
 class AssetUploader:
     def __init__(self, owner: str, repo: str, token: str):
         self.owner = owner
@@ -142,14 +150,14 @@ class AssetUploader:
     def upload_release(self, release_id: int, file_path: str):
         headers = {
             'Authorization': f'Bearer {self.token}',
+            'Content-Type': detect_mimetype(file_path),
         }
         params = {
             'name': os.path.basename(file_path)
         }
 
-        files = {'name': open(file_path, 'rb')}
         url = f"https://uploads.github.com/repos/{self.owner}/{self.repo}/releases/{release_id}/assets"
-        response = requests.post(url=url, headers=headers, files=files, params=params)
+        response = requests.post(url=url, headers=headers, data=open(file_path, 'rb'), params=params)
         if response.status_code == 201:
             return
 
@@ -169,6 +177,7 @@ class AssetAlreadyExists(Exception):
 
 class InsufficientAccessException(Exception):
     pass
+
 
 class VaultException(Exception):
     pass
