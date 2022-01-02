@@ -148,7 +148,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-w", "--weekly", default=os.environ.get(ENV_PRUNE_KEEP_WEEKS), help="The amount of weekly backups to keep")
     parser.add_argument("-M", "--monthly", default=os.environ.get(ENV_PRUNE_KEEP_MONTHS), help="The amount of monthly backups to keep")
     parser.add_argument("-i", "--id", dest="backup_id", default=os.environ.get("RESTIC_BACKUP_ID"), help="An identifier for this backup")
-    parser.add_argument("-m", "--metric-dir", default="/tmp", help="Dir to write metrics to")
+    parser.add_argument("-m", "--metric-dir", default="/var/lib/node_exporter", help="Dir to write metrics to")
     return parser.parse_args()
 
 
