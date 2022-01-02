@@ -71,7 +71,7 @@ def run_backup(repo: str, dirs: List[str]) -> Optional[str]:
 
 def write_metrics(metrics_data: io.StringIO, target_dir: Path, backup_id: str) -> None:
     """ Writes the metrics file to the target directory. """
-    target_file = f"restic_backup_{backup_id}.prom"
+    target_file = f"{METRIC_PREFIX}_{backup_id}.prom"
     tmp_file = f"{target_file}.{os.getpid()}"
     try:
         # we're kind of defeating the purpose of the stream here
@@ -89,7 +89,7 @@ def format_data(output: dict, identifier: str) -> io.StringIO:
     for metric in RESTIC_METRICS:
         if metric not in output:
             logging.error("Excepted metric to be around but wasn't: %s", metric)
-            output["exporter_errors"] = 1
+            output["exporter_errors"] =+ 1
         else:
             value = output[metric]
             buffer.write(f"# HELP {METRIC_PREFIX}_{metric}{RESTIC_METRICS[metric][0]} {RESTIC_METRICS[metric][1]}\n")
@@ -146,20 +146,21 @@ def main() -> None:
     """ Main does mainly main things. """
     start_time = datetime.utcnow().timestamp()
     args = parse_args()
+    success = False
+    json_output = {}
     try:
         validate_args(args)
-    except ValueError as err:
-        logging.error("Can not start the backup: %s", err.args[0])
-
-    # initialize dict signaling failure
-    json_output = {"success": 0}
-    try:
         stdout = run_backup(args.repo, args.targets)
         json_output = json.loads(stdout)
-        json_output["success"] = 1
+        success = True
+    except ValueError as err:
+        logging.error("Can not start the backup: %s", err.args[0])
+        sys.exit(1)
     except ResticError as err:
         logging.error("Failed to run backup: %s", err)
 
+    # add exporter metrics
+    json_output["success"] = int(success)
     json_output["exporter_errors"] = 0
     json_output["start_time"] = start_time
 
@@ -167,7 +168,7 @@ def main() -> None:
     target_dir = Path(args.metric_dir)
     write_metrics(metrics_data, target_dir, args.backup_id)
 
-    if json_output["success"] != 1:
+    if not success:
         sys.exit(1)
 
 
