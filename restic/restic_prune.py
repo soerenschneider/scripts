@@ -104,16 +104,16 @@ def format_data(output: dict, identifier: str, success: bool, start_time: dateti
         buffer.write(f'{METRIC_PREFIX}_deletions_total{{repo="{identifier}",path="{path}"}} {removed}\n')
         buffer.write(f'{METRIC_PREFIX}_keep_total{{repo="{identifier}",path="{path}"}} {keep}\n')
 
-    buffer.write(f'# HELP {METRIC_PREFIX}_success_bool{{repo="{identifier}"}} Success of the prune call\n')
-    buffer.write(f'# TYPE {METRIC_PREFIX}_success_bool{{repo="{identifier}"}} gauge\n')
+    buffer.write(f'# HELP {METRIC_PREFIX}_success_bool Success of the prune call\n')
+    buffer.write(f'# TYPE {METRIC_PREFIX}_success_bool gauge\n')
     buffer.write(f'{METRIC_PREFIX}_success_bool{{repo="{identifier}"}} {int(success)}\n')
 
-    buffer.write(f'# HELP {METRIC_PREFIX}_end_time_seconds{{repo="{identifier}"}} Date when the process finished\n')
-    buffer.write(f'# TYPE {METRIC_PREFIX}_end_time_seconds{{repo="{identifier}"}} gauge\n')
+    buffer.write(f'# HELP {METRIC_PREFIX}_end_time_seconds Date when the process finished\n')
+    buffer.write(f'# TYPE {METRIC_PREFIX}_end_time_seconds gauge\n')
     buffer.write(f'{METRIC_PREFIX}_end_time_seconds{{repo="{identifier}"}} {datetime.now().timestamp()}\n')
 
-    buffer.write(f'# HELP {METRIC_PREFIX}_start_time_seconds{{repo="{identifier}"}} Date when the process started\n')
-    buffer.write(f'# TYPE {METRIC_PREFIX}_start_time_seconds{{repo="{identifier}"}} gauge\n')
+    buffer.write(f'# HELP {METRIC_PREFIX}_start_time_seconds Date when the process started\n')
+    buffer.write(f'# TYPE {METRIC_PREFIX}_start_time_seconds gauge\n')
     buffer.write(f'{METRIC_PREFIX}_start_time_seconds{{repo="{identifier}"}} {start_time.timestamp()}\n')
 
     return buffer
