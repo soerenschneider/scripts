@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple, Any
 
+import iso8601
 import requests
 
 CMD_ADD_SECRET_ID = "add-secret-id"
@@ -42,14 +43,21 @@ class JsonStdOutput:
         print(json.dumps(pairs, default=str))
 
 
-class JsonPrometheusStdOutput:
+class JsonDisabledOutput:
+    def communicate(self, success: bool, paris: Dict = {}) -> None:
+        pass
+
+
+class PrometheusWrapperOutput:
     prefix = "vault_approle_rotation"
 
-    def __init__(self, metric_file: Path, wrap_json: bool = True, ):
+    def __init__(self, metric_file: Path, wrapper: JsonOutput = None):
         if isinstance(metric_file, str):
             metric_file = Path(metric_file)
         self.metric_file = metric_file
-        self.wrap_json = wrap_json
+        if not wrapper:
+            wrapper = JsonDisabledOutput()
+        self.wrapper = wrapper
 
     def communicate(self, success: bool, pairs: Dict = {}) -> None:
         try:
@@ -59,8 +67,7 @@ class JsonPrometheusStdOutput:
         except Exception as err:
             logging.error("Could not write metrics: %s", err)
 
-        if self.wrap_json:
-            JsonStdOutput().communicate(success, pairs)
+        self.wrapper.communicate(success, pairs)
 
     def write_metrics(self, metrics_data: io.StringIO) -> None:
         tmp_file = f"{self.metric_file}.{os.getpid()}"
@@ -98,10 +105,6 @@ class JsonPrometheusStdOutput:
                 buffer.write(f"# TYPE {self.prefix}_{key}_total gauge\n")
                 buffer.write(f"{self.prefix}_{key}_total {val}\n")
         return buffer
-
-class JsonDisabledOutput:
-    def communicate(self, success: bool, paris: Dict = {}) -> None:
-        pass
 
 
 class SecretIdRotationStrategy(ABC):
@@ -283,7 +286,9 @@ class VaultClient:
         url = urllib.parse.urljoin(self._vault_address, f"v1/auth/{self._mount_path}/role/{role_name}/{endpoint}")
         resp = requests.post(url=url, headers={TOKEN_HEADER: self._get_vault_token()}, data=data)
         if resp.ok:
-            return resp.json()["data"]
+            return {
+                "response": resp.json()["data"]
+            }
 
         raise VaultException(resp.status_code, url, resp.text)
 
@@ -315,9 +320,9 @@ class VaultClient:
         cidrs = list(set(data["cidr_list"] + data["token_bound_cidrs"]))
         metadata = data["metadata"]
 
-        creation_time = datetime.strptime(data["creation_time"], '%Y-%m-%dT%H:%M:%S.%f%z')
+        creation_time = Utils.parse_datetime(data["creation_time"])
         try:
-            expiration_time = datetime.strptime(data["expiration_time"], '%Y-%m-%dT%H:%M:%S.%f%z')
+            expiration_time = Utils.parse_datetime(data["expiration_time"])
         except ValueError:
             expiration_time = None
 
@@ -449,6 +454,8 @@ class ParsingUtils:
         # add-secret-id
         ################################################################################################################
         add_secret_id = command_subparsers.add_parser(CMD_ADD_SECRET_ID, help="Add another secret-id to a role")
+        add_secret_id.add_argument('-a', '--auto-limit-cidr', help="Limits secret_id usage and token_usage to CIDR blocks.")
+        add_secret_id.add_argument('-l', '--limit-cidr', default=list(), action="append", help="Limits secret_id usage and token_usage to CIDR blocks.")
         add_secret_id.add_argument('-d', '--destroy-others', default=False, action="store_true",
                                    help="Destroys other secret_id_accesors for this role.")
 
@@ -469,9 +476,6 @@ class ParsingUtils:
         group.add_argument('--secret-id-json-file', help="The secret_id to add, read from a json encoded file. If not specified, it is auto-generated.")
         group.set_defaults(**config_values)
 
-        group = add_secret_id.add_mutually_exclusive_group(required=False)
-        group.add_argument('-a', '--auto-limit-cidr', help="Limits secret_id usage and token_usage to CIDR blocks.")
-        group.add_argument('-l', '--limit-cidr', default=list(), action="append", help="Limits secret_id usage and token_usage to CIDR blocks.")
 
         ################################################################################################################
         # rotate-secret-id
@@ -523,6 +527,10 @@ class ParsingUtils:
 
 
 class Utils:
+    @staticmethod
+    def parse_datetime(d: str) -> datetime:
+        return iso8601.parse_date(d)
+
     @staticmethod
     def lookup_host(hostname: str) -> List[str]:
         try:
@@ -625,6 +633,9 @@ def run_add_secret_id_subcmd(vault_client: VaultClient, args: argparse.Namespace
 
 
 def run_rotate_subcmd(vault_client: VaultClient, args: argparse.Namespace, json_output: JsonOutput) -> None:
+    if args.metric_file:
+        json_output = PrometheusWrapperOutput(args.metric_file, json_output)
+
     role_id = ParsingUtils.get_role_id(args)
     role_name = ParsingUtils.get_role_name(args)
     secret_id = ParsingUtils.get_secret_id(args)
@@ -711,9 +722,7 @@ def main() -> None:
         logging.disable(logging.WARNING)
 
     json_output = JsonDisabledOutput()
-    if args.metric_file:
-        json_output = JsonPrometheusStdOutput(args.metric_file, args.json)
-    elif args.json:
+    if args.json:
         json_output = JsonStdOutput()
 
     try:
