@@ -30,6 +30,7 @@ CMD_LIST_ROLES = "list-roles"
 CMD_LOGIN_APPROLE = "login"
 CMD_LOOKUP_SECRET_ID = "lookup-secret-id"
 CMD_ROTATE_SECRET_ID = "rotate-secret-id"
+CMD_UNWRAP_SECRET_ID = "unwrap-secret-id"
 
 TOKEN_HEADER = "X-VAULT-TOKEN"
 
@@ -373,13 +374,19 @@ class VaultClient:
 
     def login(self, role_id: str, secret_id: str) -> str:
         """ Login using an Approle. Returns the client token after successful login. """
-        url = urllib.parse.urljoin(
-            self._vault_address, f"v1/auth/{self._mount_path}/login"
-        )
+        url = urllib.parse.urljoin(self._vault_address, f"v1/auth/{self._mount_path}/login")
         data = {"role_id": role_id, "secret_id": secret_id}
         resp = requests.post(url=url, data=data)
         if resp.ok:
             return resp.json()["auth"]["client_token"]
+        raise VaultException(resp.status_code, url, resp.text)
+
+    def unwrap(self, token: str) -> Dict[str, Any]:
+        """ Unwraps a secret_id. """
+        url = urllib.parse.urljoin(self._vault_address, f"v1/sys/wrapping/unwrap")
+        resp = requests.post(url=url, headers={TOKEN_HEADER: token})
+        if resp.ok:
+            return resp.json()["data"]
         raise VaultException(resp.status_code, url, resp.text)
 
 
@@ -538,6 +545,18 @@ class ParsingUtils:
             help="Destroy all secret_id_accessors for a given role_name",
         )
         destroy_all_secret_accessor_ids.add_argument("-r", "--role-name", required=True)
+
+        #############################################################################################
+        # unwrap-secret-id
+        #############################################################################################
+        unwrap_secret_id = command_subparsers.add_parser(CMD_UNWRAP_SECRET_ID, help="Unwrap a secret_id from a token")
+        group = unwrap_secret_id.add_mutually_exclusive_group(required=False)
+        group.add_argument("-t", "--token")
+        group.add_argument("-tf", "--token-file")
+
+        group = unwrap_secret_id.add_mutually_exclusive_group(required=False)
+        group.add_argument("--secret-id-json-file")
+        group.add_argument("--secret-id-file")
 
         #############################################################################################
         # add-secret-id
@@ -832,6 +851,27 @@ def run(vault_client: VaultClient, args: argparse.Namespace, json_output: JsonOu
     elif args.subparser_name == CMD_LOOKUP_SECRET_ID:
         secret_id = ParsingUtils.get_secret_id(args)
         ret = vault_client.lookup_secret_id(args.role_name, secret_id)
+        json_output.communicate(True, ret)
+
+    elif args.subparser_name == CMD_UNWRAP_SECRET_ID:
+        token = None
+        if args.token:
+            logging.info("Using token via args")
+            token = args.token
+        elif args.token_file:
+            logging.info("Trying to read token from file %s", args.token_file)
+            token = Utils.read_secret_id(args.token_file)
+        else:
+            logging.info("Trying env var VAULT_TOKEN for token")
+            token = os.getenv("VAULT_TOKEN")
+
+        if not token:
+            raise ValueError("Could not find token")
+
+        ret = {
+            "vault_response": vault_client.unwrap(token)
+        }
+        process_new_secret_id(ret, args)
         json_output.communicate(True, ret)
 
     elif args.subparser_name == CMD_LOGIN_APPROLE:
