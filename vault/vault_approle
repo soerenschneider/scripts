@@ -402,6 +402,19 @@ class KeyValueAction(argparse.Action):
 
 class ParsingUtils:
     @staticmethod
+    def get_token(args: argparse.Namespace) -> Optional[str]:
+        if args.token:
+            logging.info("Using token via args")
+            return args.token
+
+        if args.token_file:
+            logging.info("Trying to read token from file %s", args.token_file)
+            return Utils.read_from_file(args.token_file)
+
+        logging.info("Trying env var VAULT_TOKEN for token")
+        return os.getenv("VAULT_TOKEN")
+
+    @staticmethod
     def get_role_id(args: argparse.Namespace) -> str:
         """ Try to extract role_id from whereever the user wants to retrieve it from. """
         if args.role_id_json_file:
@@ -435,7 +448,7 @@ class ParsingUtils:
         if args.secret_id_file:
             if not Utils.is_secure_file(args.secret_id_file):
                 raise ValueError(f"Permissions of file {args.secret_id_file} too liberal, not continuing")
-            secret_id = Utils.read_secret_id(args.secret_id_file)
+            secret_id = Utils.read_from_file(args.secret_id_file)
             logging.info("Read secret_id from file '%s'", args.secret_id_file)
         elif args.secret_id_json_file:
             if not Utils.is_secure_file(args.secret_id_json_file):
@@ -718,11 +731,11 @@ class Utils:
         return not bool(st.st_mode & stat.S_IRGRP) and not bool(st.st_mode & stat.S_IROTH)
 
     @staticmethod
-    def read_secret_id(secret_id_file: str) -> str:
-        p = Path(secret_id_file).expanduser()
+    def read_from_file(file_path: str) -> str:
+        p = Path(file_path).expanduser()
         if p.is_file():
             return p.read_text(encoding="utf-8").rstrip("\n")
-        raise ValueError(f"Can not read secret-id from non-existent file '{p.name}'")
+        raise ValueError(f"Can not read from non-existent file '{p.name}'")
 
 
 def _log_rotation(rotated: bool, creation_time: datetime, expiration_time: datetime) -> None:
@@ -854,17 +867,7 @@ def run(vault_client: VaultClient, args: argparse.Namespace, json_output: JsonOu
         json_output.communicate(True, ret)
 
     elif args.subparser_name == CMD_UNWRAP_SECRET_ID:
-        token = None
-        if args.token:
-            logging.info("Using token via args")
-            token = args.token
-        elif args.token_file:
-            logging.info("Trying to read token from file %s", args.token_file)
-            token = Utils.read_secret_id(args.token_file)
-        else:
-            logging.info("Trying env var VAULT_TOKEN for token")
-            token = os.getenv("VAULT_TOKEN")
-
+        token = ParsingUtils.get_token(args)
         if not token:
             raise ValueError("Could not find token")
 
@@ -893,7 +896,7 @@ def run(vault_client: VaultClient, args: argparse.Namespace, json_output: JsonOu
             destroyed = vault_client.destroy_secret_id_accessor(args.role_name, args.secret_id_accessor)
         else:
             if args.secret_id_file:
-                secret_id = Utils.read_secret_id(args.secret_id_file)
+                secret_id = Utils.read_from_file(args.secret_id_file)
             else:
                 secret_id = args.secret_id
             destroyed = vault_client.destroy_secret_id(args.role_name, secret_id)
