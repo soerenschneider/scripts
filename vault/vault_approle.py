@@ -546,7 +546,7 @@ class ParsingUtils:
         add_secret_id.add_argument("--role-name-json-path", default=".role_name")
         add_secret_id.add_argument("--secret-id-json-path", default=".secret_id")
         add_secret_id.add_argument(
-            "-w", "--wrap-ttl", type=int, default=None, choices=range(300, 7200),
+            "-w", "--wrap-ttl", type=int, default=None,
             help="Wraps the secret_id. Argument is specified in seconds."
         )
         add_secret_id.add_argument(
@@ -634,8 +634,12 @@ class ParsingUtils:
 
     @staticmethod
     def validate_args(args: argparse.Namespace) -> None:
-        if args.quiet and not args.json and not args.secret_id_file:
+        if args.quiet and not args.json_output and not args.secret_id_file:
             raise ValueError("Can not use quiet=true, json=false and --secret_id")
+
+        if args.subparser_name == CMD_ADD_SECRET_ID:
+            if args.wrap_ttl and (60 >= args.wrap_ttl or args.wrap_ttl > 7200):
+                raise ValueError("wrap_ttl must be 60 >= args.wrap_ttl >= 7200")
 
 
 class Utils:
@@ -879,7 +883,7 @@ def main() -> None:
         logging.disable(logging.WARNING)
 
     json_output = JsonDisabledOutput()
-    if args.json:
+    if args.json_output:
         json_output = JsonStdOutput()
 
     try:
