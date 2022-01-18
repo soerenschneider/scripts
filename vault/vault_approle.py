@@ -468,7 +468,7 @@ class ParsingUtils:
 
         parser = argparse.ArgumentParser(parents=[conf_parser])
 
-        parser.add_argument("--json", action="store_true", default=False)
+        parser.add_argument("-j", "--json-output", action="store_true", default=False)
         parser.add_argument("-q", "--quiet", action="store_true", default=False)
         parser.add_argument("--mount-path", default="approle")
 
@@ -545,8 +545,10 @@ class ParsingUtils:
         add_secret_id = command_subparsers.add_parser(CMD_ADD_SECRET_ID, help="Add another secret-id to a role")
         add_secret_id.add_argument("--role-name-json-path", default=".role_name")
         add_secret_id.add_argument("--secret-id-json-path", default=".secret_id")
-        add_secret_id.add_argument("-w", "--wrap-ttl", type=int, default=None)
-
+        add_secret_id.add_argument(
+            "-w", "--wrap-ttl", type=int, default=None, choices=range(300, 7200),
+            help="Wraps the secret_id. Argument is specified in seconds."
+        )
         add_secret_id.add_argument(
             "-a",
             "--auto-limit-cidr",
@@ -567,27 +569,17 @@ class ParsingUtils:
             help="Destroys other secret_id_accesors for this role.",
         )
         add_secret_id.add_argument("--metadata", nargs="*", action=KeyValueAction)
-        add_secret_id.add_argument(
-            "-p", "--push-secret-id", action="store_true", default=False
-        )
+        add_secret_id.add_argument("-p", "--push-secret-id", action="store_true", default=False)
 
         group = add_secret_id.add_mutually_exclusive_group(required=True)
         group.add_argument("--role-name", help="The role name to add the secret_id to")
-        group.add_argument(
-            "--role-name-json-file", help="The role name to add the secret_id to"
-        )
+        group.add_argument("--role-name-json-file", help="The role name to add the secret_id to")
         group.set_defaults(**config_values)
         group.required = ParsingUtils._is_supplied_by_config(group, config_values)
 
         group = add_secret_id.add_mutually_exclusive_group(required=False)
-        group.add_argument(
-            "--secret-id-file",
-            help="The secret_id to add, read from a file. If not specified, it is auto-generated.",
-        )
-        group.add_argument(
-            "--secret-id-json-file",
-            help="The secret_id to add, read from a json encoded file. If not specified, it is auto-generated.",
-        )
+        group.add_argument("--secret-id-file", help="Flat file that contains the AppRole's secret_id",)
+        group.add_argument("--secret-id-json-file", help="JSON encoded file that contains the AppRole's secret_id")
         group.set_defaults(**config_values)
 
         #############################################################################################
@@ -602,10 +594,7 @@ class ParsingUtils:
 
         group = rotate_secret_id.add_mutually_exclusive_group(required=True)
         group.add_argument("--role-id", help="The AppRole role_id.")
-        group.add_argument(
-            "--role-id-json-file",
-            help="JSON encoded file that contains the AppRole's role_id",
-        )
+        group.add_argument("--role-id-json-file", help="JSON encoded file that contains the AppRole's role_id")
         group.set_defaults(**config_values)
         group.required = ParsingUtils._is_supplied_by_config(group, config_values)
 
