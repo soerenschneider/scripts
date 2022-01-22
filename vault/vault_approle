@@ -19,6 +19,8 @@ from typing import List, Optional, Dict, Tuple, Any
 
 import iso8601
 import requests
+from urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter
 
 CMD_ADD_SECRET_ID = "add-secret-id"
 CMD_LIST_SECRET_ID_ACCESSORS = "list-secret-id-accessors"
@@ -55,7 +57,11 @@ class VaultException(Exception):
 
 
 class VaultClient:
-    def __init__(self, addr: str = None, token: str = None, mount_path: str = "approle", rotation_strategy: SecretIdRotationStrategy = None):
+    def __init__(self, addr: str = None,
+                 token: str = None,
+                 mount_path: str = "approle",
+                 rotation_strategy: SecretIdRotationStrategy = None,
+                 backoff_attempts: int = 5):
         if addr:
             self._vault_address = addr
         else:
@@ -73,6 +79,12 @@ class VaultClient:
         if not rotation_strategy:
             rotation_strategy = DefaultRotationStrategy()
         self.rotation_strategy = rotation_strategy
+
+        self._http_pool = requests.Session()
+        if backoff_attempts:
+            retries = Retry(total=backoff_attempts, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+            self._http_pool.mount("http://", HTTPAdapter(max_retries=retries))
+            self._http_pool.mount("https://", HTTPAdapter(max_retries=retries))
 
     def _load_vault_token(self):
         self._vault_token = os.getenv("VAULT_TOKEN")
@@ -97,7 +109,7 @@ class VaultClient:
             self._vault_address,
             f"v1/auth/{self._mount_path}/role/{role_name}/secret-id?list=true",
         )
-        resp = requests.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
+        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
         if resp.ok:
             return resp.json()["data"]["keys"]
         if resp.status_code == 404:
@@ -132,7 +144,7 @@ class VaultClient:
             self._vault_address,
             f"v1/auth/{self._mount_path}/role/{role_name}/{name}/destroy",
         )
-        resp = requests.post(
+        resp = self._http_pool.post(
             url=url, data=data, headers={TOKEN_HEADER: self._get_vault_token()}
         )
         if resp.ok:
@@ -143,7 +155,7 @@ class VaultClient:
         url = urllib.parse.urljoin(
             self._vault_address, f"v1/auth/{self._mount_path}/role/{role_name}"
         )
-        resp = requests.delete(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
+        resp = self._http_pool.delete(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
         if resp.ok:
             return True
         raise VaultException(resp.status_code, url, resp.text)
@@ -152,7 +164,7 @@ class VaultClient:
         url = urllib.parse.urljoin(
             self._vault_address, f"v1/auth/{self._mount_path}/role?list=true"
         )
-        resp = requests.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
+        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
         if resp.ok:
             return resp.json()["data"]["keys"]
         # vault actually misuses this status code instead of returning an empty list with a correct status code
@@ -164,7 +176,7 @@ class VaultClient:
         url = urllib.parse.urljoin(
             self._vault_address, f"v1/auth/{self._mount_path}/role/{role_name}/role-id"
         )
-        resp = requests.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
+        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
         if resp.ok:
             return resp.json()["data"]["role_id"]
         raise VaultException(resp.status_code, url, resp.text)
@@ -196,7 +208,7 @@ class VaultClient:
         if wrap_ttl:
             headers["X-Vault-Wrap-TTL"] = f"{wrap_ttl}s"
 
-        resp = requests.post(url=url, headers=headers, data=data)
+        resp = self._http_pool.post(url=url, headers=headers, data=data)
         if not resp.ok:
             raise VaultException(resp.status_code, url, resp.text)
 
@@ -217,7 +229,7 @@ class VaultClient:
             data["secret_id"] = secret_id
 
         url = urllib.parse.urljoin(self._vault_address, f"v1/auth/{self._mount_path}/role/{role_name}/{name}/lookup")
-        resp = requests.post(url=url, headers={TOKEN_HEADER: self._get_vault_token()}, data=data)
+        resp = self._http_pool.post(url=url, headers={TOKEN_HEADER: self._get_vault_token()}, data=data)
         if resp.ok:
             return resp.json()["data"]
 
@@ -254,7 +266,7 @@ class VaultClient:
         """ Login using an Approle. Returns the client token after successful login. """
         url = urllib.parse.urljoin(self._vault_address, f"v1/auth/{self._mount_path}/login")
         data = {"role_id": role_id, "secret_id": secret_id}
-        resp = requests.post(url=url, data=data)
+        resp = self._http_pool.post(url=url, data=data)
         if resp.ok:
             return resp.json()["auth"]["client_token"]
         raise VaultException(resp.status_code, url, resp.text)
@@ -262,7 +274,7 @@ class VaultClient:
     def unwrap(self, token: str) -> Dict[str, Any]:
         """ Unwraps a secret_id. """
         url = urllib.parse.urljoin(self._vault_address, "v1/sys/wrapping/unwrap")
-        resp = requests.post(url=url, headers={TOKEN_HEADER: token})
+        resp = self._http_pool.post(url=url, headers={TOKEN_HEADER: token})
         if resp.ok:
             return resp.json()["data"]
         raise VaultException(resp.status_code, url, resp.text)
