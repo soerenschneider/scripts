@@ -28,6 +28,7 @@ CMD_DESTROY_ALL_SECRET_ACCESSOR_ID = "destroy-all-secret-ids"
 CMD_DESTROY_SECRET_ACCESSOR_ID = "destroy-secret-id"
 CMD_DELETE_ROLE = "delete-role"
 CMD_GET_ROLE_ID = "get-role-id"
+CMD_GET_ROLE = "get-role"
 CMD_LIST_ROLES = "list-roles"
 CMD_LOGIN_APPROLE = "login"
 CMD_LOOKUP_SECRET_ID = "lookup-secret-id"
@@ -170,6 +171,15 @@ class VaultClient:
         # vault actually misuses this status code instead of returning an empty list with a correct status code
         if resp.status_code == 404:
             return []
+        raise VaultException(resp.status_code, url, resp.text)
+
+    def get_role(self, role_name: str) -> Optional[str]:
+        url = urllib.parse.urljoin(
+            self._vault_address, f"v1/auth/{self._mount_path}/role/{role_name}"
+        )
+        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
+        if resp.ok:
+            return resp.json()["data"]
         raise VaultException(resp.status_code, url, resp.text)
 
     def get_role_id(self, role_name: str) -> Optional[str]:
@@ -349,6 +359,16 @@ class CommandGetRoleId(Command):
     def run(self, args: argparse.Namespace) -> None:
         role_id = self.vault_client.get_role_id(args.role_name)
         self.output.communicate(True, {"role_id": role_id, "role_name": args.role_name})
+
+
+class CommandGetRole(Command):
+    _cmd_id = CMD_GET_ROLE
+
+    def run(self, args: argparse.Namespace) -> None:
+        logging.info("Reading info for role %s", args.role_name)
+        resp = self.vault_client.get_role(args.role_name)
+        self.output.communicate(True, resp)
+        logging.info(json.dumps(resp, indent=4, sort_keys=True))
 
 
 class CommandDeleteRole(Command):
@@ -729,6 +749,12 @@ class ParsingUtils:
         #############################################################################################
         get_role_id = command_subparsers.add_parser(CMD_GET_ROLE_ID, help="Get role_id for a given approle name")
         get_role_id.add_argument("-r", "--role-name", required=True)
+
+        #############################################################################################
+        # get-role
+        #############################################################################################
+        get_role = command_subparsers.add_parser(CMD_GET_ROLE, help="Get role information for a given approle name")
+        get_role.add_argument("-r", "--role-name", required=True)
 
         #############################################################################################
         # delete-role
