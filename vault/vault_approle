@@ -294,7 +294,10 @@ def run(vault_client: VaultClient, args: argparse.Namespace, json_output: JsonOu
 
 
 def main() -> None:
-    args = ParsingUtils.parse_args()
+    try:
+        args = ParsingUtils.parse_args()
+    except ValueError as err:
+        logging.error("Could not parse arguments: %s", err)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
     if args.quiet:
@@ -874,6 +877,12 @@ class ParsingUtils:
         if len(sys.argv) == 1:
             parser.print_help(sys.stderr)
             sys.exit(1)
+
+        # check if all config values in the file are actually recognized
+        known_config_keys = [d.dest for d in parser._actions]
+        for conf_file_val in config_values:
+            if conf_file_val not in known_config_keys:
+                raise ValueError(f"Unknown config key: {conf_file_val}")
 
         return parser.parse_args(remaining_argv)
 
