@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.0](https://www.github.com/soerenschneider/scripts/compare/v1.1.0...v1.2.0) (2022-01-23)
+
+
+### Features
+
+* Add command to print role info ([eef0aac](https://www.github.com/soerenschneider/scripts/commit/eef0aac178f16722e27bf11f66033885c802bb38))
+* call out unknown config values ([97bf833](https://www.github.com/soerenschneider/scripts/commit/97bf833f325edc6327d684224950660756bc7be6))
+* implement backoff ([9a0cf96](https://www.github.com/soerenschneider/scripts/commit/9a0cf960a11782c08b0d0a3ab311f4f6e246cf59))
+
+
+### Bug Fixes
+
+* use correct accessor for output ([7f7e7c6](https://www.github.com/soerenschneider/scripts/commit/7f7e7c696543aececc605d00a5bc033fa727b0da))
+
 ## [1.1.0](https://www.github.com/soerenschneider/scripts/compare/v1.0.0...v1.1.0) (2022-01-03)
 
 
