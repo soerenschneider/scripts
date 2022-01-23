@@ -512,7 +512,7 @@ class CommandRotateSecretId(Command):
         CommandRotateSecretId._log_rotation(ret["rotated_secret_id"], ret["creation_time"], ret["expiration_time"])
         if not ret["rotated_secret_id"]:
             # secret_id has not been rotated
-            json_output.communicate(True, ret)
+            self.output.communicate(True, ret)
             sys.exit(0)
 
         Utils.process_new_secret_id(ret, args)
@@ -527,7 +527,7 @@ class CommandRotateSecretId(Command):
         ret["destroyed"], ret["errors"] = self.vault_client.destroy_secret_id_accessors(role_name,
                                                                                    delete_secret_id_accessors)
         logging.info("Destroyed %d secret_id_accessors, %d errors occured", ret["destroyed"], ret["errors"])
-        json_output.communicate(True, ret)
+        self.output.communicate(True, ret)
 
     @staticmethod
     def _log_rotation(rotated: bool, creation_time: datetime, expiration_time: datetime) -> None:
