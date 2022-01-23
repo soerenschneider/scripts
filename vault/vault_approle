@@ -273,7 +273,7 @@ class VaultClient:
 
     def unwrap(self, token: str) -> Dict[str, Any]:
         """ Unwraps a secret_id. """
-        url = urllib.parse.urljoin(self._vault_address, f"v1/sys/wrapping/unwrap")
+        url = urllib.parse.urljoin(self._vault_address, "v1/sys/wrapping/unwrap")
         resp = self._http_pool.post(url=url, headers={TOKEN_HEADER: token})
         if resp.ok:
             return resp.json()["data"]
@@ -958,7 +958,7 @@ class PrometheusWrapperOutput:
             val = pairs[key]
             if isinstance(val, str):
                 continue
-            elif isinstance(val, bool):
+            if isinstance(val, bool):
                 val = 1 if val else 0
                 buffer.write(f"# HELP {self._metric_prefix}_{key}_bool Auto-generated, sorry\n")
                 buffer.write(f"# TYPE {self._metric_prefix}_{key}_bool gauge\n")
