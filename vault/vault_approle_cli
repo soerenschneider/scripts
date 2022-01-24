@@ -499,12 +499,11 @@ class CommandRotateSecretId(Command):
         if args.metric_file:
             self.output = PrometheusWrapperOutput(args.metric_file, self.output)
 
-        role_id = ParsingUtils.get_role_id(args)
         role_name = ParsingUtils.get_role_name(args)
         secret_id = ParsingUtils.get_secret_id(args)
         # role_name not required, if not specified use role_id
-        if not role_name:
-            role_name = role_id
+        logging.info("Fetching role_id for role_name %s", role_name)
+        role_id = self.vault_client.get_role_id(role_name)
 
         logging.info("Creating new secret_id for role_name '%s'", role_name)
         ret = self.vault_client.rotate_secret_id(role_id, secret_id, role_name)
@@ -879,20 +878,14 @@ class ParsingUtils:
         rotate_secret_id.add_argument("--ignore-cidr", help="Ignore previously attached CIDRs")
 
         group = rotate_secret_id.add_mutually_exclusive_group(required=True)
-        group.add_argument("--role-id", help="The AppRole role_id.")
-        group.add_argument("--role-id-json-file", help="JSON encoded file that contains the AppRole's role_id")
+        group.add_argument("-s", "--secret-id", help="The secret_id to use for authentication")
+        group.add_argument("-sf", "--secret-id-file", help="Flat file that contains the AppRole's secret_id")
+        group.add_argument("-sj", "--secret-id-json-file", help="JSON encoded file that contains the AppRole's secret_id")
         group.set_defaults(**config_values)
         group.required = ParsingUtils._is_supplied_by_config(group, config_values)
 
         group = rotate_secret_id.add_mutually_exclusive_group(required=True)
-        group.add_argument("--secret-id", help="The secret_id to use for authentication")
-        group.add_argument("--secret-id-file", help="Flat file that contains the AppRole's secret_id")
-        group.add_argument("--secret-id-json-file", help="JSON encoded file that contains the AppRole's secret_id")
-        group.set_defaults(**config_values)
-        group.required = ParsingUtils._is_supplied_by_config(group, config_values)
-
-        group = rotate_secret_id.add_mutually_exclusive_group(required=True)
-        group.add_argument("--role-name", help="The AppRole's role_name. If not specified, uses the role_id.")
+        group.add_argument("-r", "--role-name", help="The AppRole's role_name. If not specified, uses the role_id.")
         group.add_argument("--role-name-json-file", help="JSON encoded file that contains the AppRole's secret_id")
         group.set_defaults(**config_values)
         group.required = ParsingUtils._is_supplied_by_config(group, config_values)
