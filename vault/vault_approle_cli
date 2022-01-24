@@ -497,7 +497,7 @@ class CommandRotateSecretId(Command):
 
     def run(self, args: argparse.Namespace) -> None:
         if args.metric_file:
-            json_output = PrometheusWrapperOutput(args.metric_file, self.output)
+            self.output = PrometheusWrapperOutput(args.metric_file, self.output)
 
         role_id = ParsingUtils.get_role_id(args)
         role_name = ParsingUtils.get_role_name(args)
