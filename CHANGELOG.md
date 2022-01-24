@@ -1,5 +1,13 @@
 # Changelog
 
+### [1.2.1](https://www.github.com/soerenschneider/scripts/compare/v1.2.0...v1.2.1) (2022-01-24)
+
+
+### Bug Fixes
+
+* don't create password locally by default when rotation secret_id ([3bf57fc](https://www.github.com/soerenschneider/scripts/commit/3bf57fcdc4cd72127cf712347a92f99e72ffee7a))
+* wrap correct output ([b3688f3](https://www.github.com/soerenschneider/scripts/commit/b3688f339e285c4d75834e3956482642b9e79768))
+
 ## [1.2.0](https://www.github.com/soerenschneider/scripts/compare/v1.1.0...v1.2.0) (2022-01-23)
 
 
