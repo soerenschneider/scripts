@@ -774,7 +774,7 @@ class ParsingUtils:
         lookup_secret_id.add_argument("-r", "--role-name", required=True)
         lookup_secret_id.add_argument("--secret-id-json-path", default=".secret_id")
         group = lookup_secret_id.add_mutually_exclusive_group(required=True)
-        group.add_argument("--secret-id", help="secret_id to use.")
+        group.add_argument("-s", "--secret-id", help="secret_id to use.")
         group.add_argument("--secret-id-file", help="Read secret_id from this file.")
         group.add_argument("--secret-id-json-file", help="Read secret_id from this JSON-encoded file.")
 
@@ -786,9 +786,9 @@ class ParsingUtils:
         login.add_argument("-r", "--role-id", required=True, help="role_id of the Approle to login.")
         login.add_argument("--token-file", help="Write acquired token to this file.")
         group = login.add_mutually_exclusive_group(required=True)
-        group.add_argument("--secret-id", help="secret_id to use.")
-        group.add_argument("--secret-id-file", help="Read secret_id from this file.")
-        group.add_argument("--secret-id-json-file", help="Read secret_id from this JSON-encoded file.")
+        group.add_argument("-s", "--secret-id", help="secret_id to use.")
+        group.add_argument("-si", "--secret-id-file", help="Read secret_id from this file.")
+        group.add_argument("-sj", "--secret-id-json-file", help="Read secret_id from this JSON-encoded file.")
 
         #############################################################################################
         # destroy-secret-accessor-id
@@ -799,9 +799,9 @@ class ParsingUtils:
         )
         destroy_secret_accessor_id.add_argument("-r", "--role-name", required=True)
         group = destroy_secret_accessor_id.add_mutually_exclusive_group(required=True)
-        group.add_argument("-i", "--secret-id")
-        group.add_argument("-f", "--secret-id-file")
-        group.add_argument("-a", "--secret-id-accessor")
+        group.add_argument("-s", "--secret-id")
+        group.add_argument("-sf", "--secret-id-file")
+        group.add_argument("-aa", "--secret-id-accessor")
 
         #############################################################################################
         # destroy-all-secret-accessor-ids
@@ -821,8 +821,8 @@ class ParsingUtils:
         group.add_argument("-tf", "--token-file")
 
         group = unwrap_secret_id.add_mutually_exclusive_group(required=False)
-        group.add_argument("--secret-id-json-file")
-        group.add_argument("--secret-id-file")
+        group.add_argument("-sj", "--secret-id-json-file")
+        group.add_argument("-sf", "--secret-id-file")
 
         #############################################################################################
         # add-secret-id
