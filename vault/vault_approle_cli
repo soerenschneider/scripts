@@ -35,6 +35,12 @@ CMD_LOOKUP_SECRET_ID = "lookup-secret-id"
 CMD_ROTATE_SECRET_ID = "rotate-secret-id"
 CMD_UNWRAP_SECRET_ID = "unwrap-secret-id"
 
+CMD_LIST_GROUPS = "list-groups"
+CMD_GET_GROUP = "get-group"
+
+CMD_GET_ENTITY = "get-entity"
+CMD_LIST_ENTITIES = "list-entities"
+
 TOKEN_HEADER = "X-VAULT-TOKEN"
 
 
@@ -288,6 +294,46 @@ class VaultClient:
             return resp.json()["data"]
         raise VaultException(resp.status_code, url, resp.text)
 
+    def list_groups(self) -> List[str]:
+        url = urllib.parse.urljoin(self._vault_address, "v1/identity/group/name?list=true")
+        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
+        if resp.ok:
+            return resp.json()["data"]["keys"]
+        # vault actually misuses this status code instead of returning an empty list with a correct status code
+        if resp.status_code == 404:
+            return []
+        raise VaultException(resp.status_code, url, resp.text)
+
+    def read_group(self, group_name: str) -> Dict[str, Any]:
+        url = urllib.parse.urljoin(self._vault_address, f"v1/identity/group/name/{group_name}")
+        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
+        if resp.ok:
+            return resp.json()["data"]
+        # vault actually misuses this status code instead of returning an empty list with a correct status code
+        if resp.status_code == 404:
+            return []
+        raise VaultException(resp.status_code, url, resp.text)
+
+    def list_entities(self) -> List[str]:
+        url = urllib.parse.urljoin(self._vault_address, "v1/identity/entity/name?list=true")
+        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
+        if resp.ok:
+            return resp.json()["data"]["keys"]
+        # vault actually misuses this status code instead of returning an empty list with a correct status code
+        if resp.status_code == 404:
+            return []
+        raise VaultException(resp.status_code, url, resp.text)
+
+    def read_entity(self, entity_name: str) -> Dict[str, Any]:
+        url = urllib.parse.urljoin(self._vault_address, f"v1/identity/entity/name/{entity_name}")
+        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
+        if resp.ok:
+            return resp.json()["data"]
+        # vault actually misuses this status code instead of returning an empty list with a correct status code
+        if resp.status_code == 404:
+            return []
+        raise VaultException(resp.status_code, url, resp.text)
+
 
 def run(vault_client: VaultClient, args: argparse.Namespace, json_output: JsonOutput) -> None:
     available_commands = {}
@@ -367,7 +413,7 @@ class CommandGetRole(Command):
         logging.info("Reading info for role %s", args.role_name)
         resp = self.vault_client.get_role(args.role_name)
         self.output.communicate(True, resp)
-        logging.info(json.dumps(resp, indent=4, sort_keys=True))
+        print(json.dumps(resp, indent=4, sort_keys=True))
 
 
 class CommandDeleteRole(Command):
@@ -376,6 +422,7 @@ class CommandDeleteRole(Command):
     def run(self, args: argparse.Namespace) -> None:
         success = self.vault_client.delete_role(args.role_name)
         self.output.communicate(success, {"role_name": args.role_name})
+        print(success)
 
 
 class CommandUnwrapSecretId(Command):
@@ -398,8 +445,9 @@ class CommandLookupSecretId(Command):
 
     def run(self, args: argparse.Namespace) -> None:
         secret_id = ParsingUtils.get_secret_id(args)
-        ret = self.vault_client.lookup_secret_id(args.role_name, secret_id)
-        self.output.communicate(True, ret)
+        resp = self.vault_client.lookup_secret_id(args.role_name, secret_id)
+        self.output.communicate(True, resp)
+        print(json.dumps(resp, indent=4, sort_keys=True))
 
 
 class CommandLoginApprole(Command):
@@ -449,6 +497,38 @@ class CommandListSecretIdAccessors(Command):
     def run(self, args: argparse.Namespace) -> None:
         secret_id_accessors = self.vault_client.get_secret_id_accessors(args.role_name)
         self.output.communicate(True, {"secret_id_accessors": secret_id_accessors, "role_name": args.role_name})
+
+
+class CommandListEntities(Command):
+    _cmd_id = CMD_LIST_ENTITIES
+
+    def run(self, args: argparse.Namespace) -> None:
+        entities = self.vault_client.list_entities()
+        self.output.communicate(True, {"entities": entities})
+
+
+class CommandGetEntity(Command):
+    _cmd_id = CMD_GET_ENTITY
+
+    def run(self, args: argparse.Namespace) -> None:
+        entity = self.vault_client.read_entity(args.entity_name)
+        self.output.communicate(True, entity)
+
+
+class CommandListGroups(Command):
+    _cmd_id = CMD_LIST_GROUPS
+
+    def run(self, args: argparse.Namespace) -> None:
+        groups = self.vault_client.list_groups()
+        self.output.communicate(True, {"groups": groups})
+
+
+class CommandGetGroup(Command):
+    _cmd_id = CMD_GET_GROUP
+
+    def run(self, args: argparse.Namespace) -> None:
+        group = self.vault_client.read_group(args.group_name)
+        self.output.communicate(True, group)
 
 
 class CommandAddSecretId(Command):
@@ -768,6 +848,28 @@ class ParsingUtils:
         list_secret_accessor_ids.add_argument("-r", "--role-name", required=True)
 
         #############################################################################################
+        # list-groups
+        #############################################################################################
+        command_subparsers.add_parser(CMD_LIST_GROUPS, help="List all groups by name")
+
+        #############################################################################################
+        # get-group
+        #############################################################################################
+        get_group = command_subparsers.add_parser(CMD_GET_GROUP, help="Get a group by name")
+        get_group.add_argument("-n", "--group-name", required=True)
+
+        #############################################################################################
+        # list-entities
+        #############################################################################################
+        command_subparsers.add_parser(CMD_LIST_ENTITIES, help="List all entities by name")
+
+        #############################################################################################
+        # get-entity
+        #############################################################################################
+        get_entity = command_subparsers.add_parser(CMD_GET_ENTITY, help="Get an entity by name")
+        get_entity.add_argument("-n", "--entity-name", required=True)
+
+        #############################################################################################
         # lookup-secret-id
         #############################################################################################
         lookup_secret_id = command_subparsers.add_parser(CMD_LOOKUP_SECRET_ID, help="Lookup a secret_id")
@@ -996,7 +1098,6 @@ class PrometheusWrapperOutput:
                 buffer.write(f"# TYPE {self._metric_prefix}_{key}_total gauge\n")
                 buffer.write(f"{self._metric_prefix}_{key}_total {val}\n")
         return buffer
-
 
 
 class DefaultRotationStrategy(SecretIdRotationStrategy):
