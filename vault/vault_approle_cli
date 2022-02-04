@@ -349,12 +349,13 @@ def run(vault_client: VaultClient, args: argparse.Namespace, json_output: JsonOu
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
     try:
         args = ParsingUtils.parse_args()
     except ValueError as err:
         logging.error("Could not parse arguments: %s", err)
+        sys.exit(1)
 
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
     if args.quiet:
         logging.disable(logging.WARNING)
 
