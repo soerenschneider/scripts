@@ -590,7 +590,7 @@ class CommandRotateSecretId(Command):
         CommandRotateSecretId._log_rotation(ret["rotated_secret_id"], ret["creation_time"], ret["expiration_time"])
         if not ret["rotated_secret_id"]:
             # secret_id has not been rotated
-            self.output.communicate(True, ret)
+            self.output.communicate(True, ret, role_name)
             sys.exit(0)
 
         Utils.process_new_secret_id(ret, args)
@@ -605,7 +605,7 @@ class CommandRotateSecretId(Command):
         ret["destroyed"], ret["errors"] = self.vault_client.destroy_secret_id_accessors(role_name,
                                                                                    delete_secret_id_accessors)
         logging.info("Destroyed %d secret_id_accessors, %d errors occured", ret["destroyed"], ret["errors"])
-        self.output.communicate(True, ret)
+        self.output.communicate(True, ret, role_name)
 
     @staticmethod
     def _log_rotation(rotated: bool, creation_time: datetime, expiration_time: datetime) -> None:
@@ -1059,9 +1059,9 @@ class PrometheusWrapperOutput:
             wrapper = JsonDisabledOutput()
         self.wrapper = wrapper
 
-    def communicate(self, success: bool, pairs: Dict) -> None:
+    def communicate(self, success: bool, pairs: Dict, role_name: str) -> None:
         try:
-            buffer = self._collect(pairs)
+            buffer = self._collect(pairs, role_name)
             logging.info("Writing metrics to file %s", self.metric_file)
             self.write_metrics(buffer)
         except Exception as err:
@@ -1078,7 +1078,7 @@ class PrometheusWrapperOutput:
         finally:
             metrics_data.close()
 
-    def _collect(self, pairs: Dict[str, Any]) -> io.StringIO:
+    def _collect(self, pairs: Dict[str, Any], role_name: str) -> io.StringIO:
         buffer = io.StringIO()
         for key in pairs:
             val = pairs[key]
@@ -1088,21 +1088,21 @@ class PrometheusWrapperOutput:
                 val = 1 if val else 0
                 buffer.write(f"# HELP {self._metric_prefix}_{key}_bool Auto-generated, sorry\n")
                 buffer.write(f"# TYPE {self._metric_prefix}_{key}_bool gauge\n")
-                buffer.write(f"{self._metric_prefix}_{key}_bool {val}\n")
+                buffer.write(f'{self._metric_prefix}_{key}_bool{{role_name="{role_name}"}} {val}\n')
             elif isinstance(val, datetime):
                 val = val.timestamp()
                 buffer.write(f"# HELP {self._metric_prefix}_{key}_timestamp_seconds Auto-generated, sorry\n")
                 buffer.write(f"# TYPE {self._metric_prefix}_{key}_timestamp_seconds gauge\n")
-                buffer.write(f"{self._metric_prefix}_{key}_timestamp_seconds {val}\n")
+                buffer.write(f'{self._metric_prefix}_{key}_timestamp_seconds{{role_name="{role_name}"}} {val}\n')
             elif isinstance(val, dict) and "secret_id_ttl" in val:
                 val = val["secret_id_ttl"]
                 buffer.write(f"# HELP {self._metric_prefix}_{key}_timestamp_seconds Time until the secret_id expires in seconds\n")
                 buffer.write(f"# TYPE {self._metric_prefix}_{key}_timestamp_seconds gauge\n")
-                buffer.write(f"{self._metric_prefix}_{'secret_id_ttl'}_timestamp_seconds {val}\n")
+                buffer.write(f'{self._metric_prefix}_{"secret_id_ttl"}_timestamp_seconds{{role_name="{role_name}"}} {val}\n')
             else:
                 buffer.write(f"# HELP {self._metric_prefix}_{key}_total Auto-generated, sorry\n")
                 buffer.write(f"# TYPE {self._metric_prefix}_{key}_total gauge\n")
-                buffer.write(f"{self._metric_prefix}_{key}_total {val}\n")
+                buffer.write(f'{self._metric_prefix}_{key}_total{{role_name="{role_name}"}} {val}\n')
         return buffer
 
 
