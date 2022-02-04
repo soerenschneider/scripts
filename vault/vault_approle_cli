@@ -1005,10 +1005,10 @@ class ParsingUtils:
             sys.exit(1)
 
         # check if all config values in the file are actually recognized
-        known_config_keys = [d.dest for d in parser._actions]
-        for conf_file_val in config_values:
-            if conf_file_val not in known_config_keys:
-                raise ValueError(f"Unknown config key: {conf_file_val}")
+        #known_config_keys = [d.dest for d in parser._actions]
+        #for conf_file_val in config_values:
+        #    if conf_file_val not in known_config_keys:
+        #        raise ValueError(f"Unknown config key: {conf_file_val}")
 
         return parser.parse_args(remaining_argv)
 
