@@ -948,7 +948,7 @@ class ParsingUtils:
         rotate_secret_id.add_argument("--secret-id-json-path", default=".secret_id", help="JSON path to secret-id")
         rotate_secret_id.add_argument("--metric-file", help="File to write prometheus metrics to")
         rotate_secret_id.add_argument("--ignore-cidr", help="Ignore previously attached CIDRs")
-        rotate_secret_id.add_argument("--force-rotation", type="store_true", help="Force the rotation")
+        rotate_secret_id.add_argument("--force-rotation", action="store_true", help="Force the rotation")
         rotate_secret_id.add_argument("--min-validity-period", type=int, default=33,
                                       help="Rotate the secret_id if the remaining validity is less than x. Value is "
                                            "in percent (0-100)")
