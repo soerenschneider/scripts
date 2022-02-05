@@ -365,7 +365,8 @@ def main() -> None:
 
     try:
         ParsingUtils.validate_args(args)
-        vault_client = VaultClient(addr=args.vault_address, token=args.vault_token, mount_path=args.mount_path)
+        vault_client = VaultClient(addr=args.vault_address, token=args.vault_token, mount_path=args.mount_path,
+                                   rotation_strategy=MaxPercentageRotationStrategy(34))
         run(vault_client, args, json_output)
     except ValueError as err:
         logging.error("Value error: %s", err)
@@ -1149,10 +1150,18 @@ class MaxPercentageRotationStrategy(SecretIdRotationStrategy):
         self.max_lifetime_percentage = max_lifetime_percentage
 
     def rotate(self, creation_time: datetime, expiration_time: datetime) -> bool:
+        if not creation_time:
+            logging.warning("creation_time not defined, will rotate secret_id")
+            return True
+
         if not expiration_time:
+            logging.warning("expiration_time not defined, will rotate secret_id")
             return True
 
         lifetime_seconds = (expiration_time - creation_time).total_seconds()
+        if lifetime_seconds == 0:
+            return True
+
         passed_seconds = (datetime.now(timezone.utc) - creation_time).total_seconds()
         passed_percent = passed_seconds * 100 / lifetime_seconds
         return passed_percent >= self.max_lifetime_percentage
