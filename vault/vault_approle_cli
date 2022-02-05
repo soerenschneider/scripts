@@ -264,8 +264,7 @@ class VaultClient:
         creation_time = Utils.parse_datetime(data["creation_time"])
         try:
             expiration_time = Utils.parse_datetime(data["expiration_time"])
-            percentage = (datetime.now(timezone.utc) - creation_time).total_seconds() * 100 / \
-                         (expiration_time - creation_time).total_seconds()
+            percentage = (expiration_time - datetime.now(timezone.utc)).total_seconds() * 100 / (expiration_time - creation_time).total_seconds()
         except ValueError:
             expiration_time = None
 
@@ -373,7 +372,7 @@ def main() -> None:
     try:
         ParsingUtils.validate_args(args)
         vault_client = VaultClient(addr=args.vault_address, token=args.vault_token, mount_path=args.mount_path,
-                                   rotation_strategy=MaxPercentageRotationStrategy(34))
+                                   rotation_strategy=LifetimeRotationStrategy(34))
         run(vault_client, args, json_output)
     except ValueError as err:
         logging.error("Value error: %s", err)
@@ -1150,11 +1149,11 @@ class MaxAgeRotationStrategy(SecretIdRotationStrategy):
         return diff.total_seconds() > self.max_age_seconds
 
 
-class MaxPercentageRotationStrategy(SecretIdRotationStrategy):
-    """Rotate after reaching x percent of the total lifetime if an expiration time is defined, otherwise rotate."""
+class LifetimeRotationStrategy(SecretIdRotationStrategy):
+    """Rotate when reached x percent of lifetime left."""
 
-    def __init__(self, max_lifetime_percentage: int):
-        self.max_lifetime_percentage = max_lifetime_percentage
+    def __init__(self, min_lifetime_percentage: int):
+        self.min_lifetime_percentage = min_lifetime_percentage
 
     def rotate(self, creation_time: datetime, expiration_time: datetime) -> bool:
         if not creation_time:
@@ -1169,9 +1168,10 @@ class MaxPercentageRotationStrategy(SecretIdRotationStrategy):
         if lifetime_seconds == 0:
             return True
 
-        passed_seconds = (datetime.now(timezone.utc) - creation_time).total_seconds()
-        passed_percent = passed_seconds * 100 / lifetime_seconds
-        return passed_percent >= self.max_lifetime_percentage
+        seconds_until_expiration = (expiration_time - datetime.now(timezone.utc)).total_seconds()
+        time_left_percent = seconds_until_expiration * 100 / lifetime_seconds
+        logging.info("secret_id lifetime reached %d%%, valid from %s until %s", time_left_percent, creation_time, expiration_time)
+        return time_left_percent <= self.min_lifetime_percentage
 
 
 if __name__ == "__main__":
