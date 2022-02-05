@@ -68,7 +68,7 @@ class VaultClient:
                  token: str = None,
                  mount_path: str = "approle",
                  rotation_strategy: SecretIdRotationStrategy = None,
-                 backoff_attempts: int = 5):
+                 backoff_attempts: int = 2):
         if addr:
             self._vault_address = addr
         else:
