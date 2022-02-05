@@ -260,9 +260,12 @@ class VaultClient:
         cidrs = list(set(data["cidr_list"] + data["token_bound_cidrs"]))
         metadata = data["metadata"]
 
+        percentage = -1
         creation_time = Utils.parse_datetime(data["creation_time"])
         try:
             expiration_time = Utils.parse_datetime(data["expiration_time"])
+            percentage = (datetime.now(timezone.utc) - creation_time).total_seconds() * 100 / \
+                         (expiration_time - creation_time).total_seconds()
         except ValueError:
             expiration_time = None
 
@@ -270,6 +273,7 @@ class VaultClient:
             "creation_time": creation_time,
             "expiration_time": expiration_time,
             "rotated_secret_id": False,
+            "percentage": percentage,
         }
 
         if self.rotation_strategy.rotate(creation_time, expiration_time):
