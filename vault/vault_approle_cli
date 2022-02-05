@@ -264,7 +264,7 @@ class VaultClient:
         creation_time = Utils.parse_datetime(data["creation_time"])
         try:
             expiration_time = Utils.parse_datetime(data["expiration_time"])
-            percentage = (expiration_time - datetime.now(timezone.utc)).total_seconds() * 100 / (expiration_time - creation_time).total_seconds()
+            percentage = (expiration_time - datetime.now(timezone.utc)).total_seconds() * 100. / (expiration_time - creation_time).total_seconds()
         except ValueError:
             expiration_time = None
 
@@ -597,7 +597,7 @@ class CommandRotateSecretId(Command):
         CommandRotateSecretId._log_rotation(ret["rotated_secret_id"], ret["creation_time"], ret["expiration_time"])
         if not ret["rotated_secret_id"]:
             # secret_id has not been rotated
-            self.output.communicate(True, ret, role_name)
+            self.output.communicate(True, ret)
             sys.exit(0)
 
         Utils.process_new_secret_id(ret, args)
@@ -612,7 +612,7 @@ class CommandRotateSecretId(Command):
         ret["destroyed"], ret["errors"] = self.vault_client.destroy_secret_id_accessors(role_name,
                                                                                    delete_secret_id_accessors)
         logging.info("Destroyed %d secret_id_accessors, %d errors occured", ret["destroyed"], ret["errors"])
-        self.output.communicate(True, ret, role_name)
+        self.output.communicate(True, ret)
 
     @staticmethod
     def _log_rotation(rotated: bool, creation_time: datetime, expiration_time: datetime) -> None:
@@ -724,7 +724,7 @@ class Utils:
 class KeyValueAction(argparse.Action):
     """ Argparse action to parse a dict. """
     def __call__(self, parser, namespace, values, option_string=None):
-        setattr(namespace, self.dest, dict())
+        setattr(namespace, self.dest, {})
 
         for value in values:
             key, value = value.split("=")
@@ -810,7 +810,7 @@ class ParsingUtils:
         if group_args.config:
             try:
                 config_file = Path(group_args.config).expanduser()
-                with open(config_file) as cf:
+                with open(config_file, encoding="utf-8") as cf:
                     config = json.load(cf)
                     config_values.update(config)
             except json.decoder.JSONDecodeError as err:
@@ -951,7 +951,7 @@ class ParsingUtils:
         add_secret_id.add_argument(
             "-l",
             "--limit-cidr",
-            default=list(),
+            default=[],
             action="append",
             help="Limits secret_id usage and token_usage to CIDR blocks.",
         )
@@ -1051,27 +1051,31 @@ class JsonStdOutput(JsonOutput):
 
 
 class JsonDisabledOutput(JsonOutput):
-    def communicate(self, success: bool, paris: Dict) -> None:
+    def communicate(self, success: bool, pairs: Dict) -> None:
         pass
 
 
 class PrometheusWrapperOutput:
     _metric_prefix = "vault_approle_rotation"
 
-    def __init__(self, metric_file: Path, wrapper: JsonOutput = None):
+    def __init__(self, metric_file: Path, role_name: str, wrapper: JsonOutput = None):
         if isinstance(metric_file, str):
             metric_file = Path(metric_file)
         self.metric_file = metric_file
+        if not role_name:
+            raise ValueError("no role_name provided")
+        self.role_name = role_name
+
         if not wrapper:
             wrapper = JsonDisabledOutput()
         self.wrapper = wrapper
 
-    def communicate(self, success: bool, pairs: Dict, role_name: str) -> None:
+    def communicate(self, success: bool, pairs: Dict) -> None:
         try:
-            buffer = self._collect(pairs, role_name)
+            buffer = self._collect(pairs)
             logging.info("Writing metrics to file %s", self.metric_file)
             self.write_metrics(buffer)
-        except Exception as err:
+        except RuntimeError as err:
             logging.error("Could not write metrics: %s", err)
 
         self.wrapper.communicate(success, pairs)
@@ -1085,7 +1089,7 @@ class PrometheusWrapperOutput:
         finally:
             metrics_data.close()
 
-    def _collect(self, pairs: Dict[str, Any], role_name: str) -> io.StringIO:
+    def _collect(self, pairs: Dict[str, Any]) -> io.StringIO:
         buffer = io.StringIO()
         for key in pairs:
             val = pairs[key]
@@ -1095,21 +1099,21 @@ class PrometheusWrapperOutput:
                 val = 1 if val else 0
                 buffer.write(f"# HELP {self._metric_prefix}_{key}_bool Auto-generated, sorry\n")
                 buffer.write(f"# TYPE {self._metric_prefix}_{key}_bool gauge\n")
-                buffer.write(f'{self._metric_prefix}_{key}_bool{{role_name="{role_name}"}} {val}\n')
+                buffer.write(f'{self._metric_prefix}_{key}_bool{{role_name="{self.role_name}"}} {val}\n')
             elif isinstance(val, datetime):
                 val = val.timestamp()
                 buffer.write(f"# HELP {self._metric_prefix}_{key}_timestamp_seconds Auto-generated, sorry\n")
                 buffer.write(f"# TYPE {self._metric_prefix}_{key}_timestamp_seconds gauge\n")
-                buffer.write(f'{self._metric_prefix}_{key}_timestamp_seconds{{role_name="{role_name}"}} {val}\n')
+                buffer.write(f'{self._metric_prefix}_{key}_timestamp_seconds{{role_name="{self.role_name}"}} {val}\n')
             elif isinstance(val, dict) and "secret_id_ttl" in val:
                 val = val["secret_id_ttl"]
                 buffer.write(f"# HELP {self._metric_prefix}_{key}_timestamp_seconds Time until the secret_id expires in seconds\n")
                 buffer.write(f"# TYPE {self._metric_prefix}_{key}_timestamp_seconds gauge\n")
-                buffer.write(f'{self._metric_prefix}_{"secret_id_ttl"}_timestamp_seconds{{role_name="{role_name}"}} {val}\n')
+                buffer.write(f'{self._metric_prefix}_{"secret_id_ttl"}_timestamp_seconds{{role_name="{self.role_name}"}} {val}\n')
             else:
                 buffer.write(f"# HELP {self._metric_prefix}_{key}_total Auto-generated, sorry\n")
                 buffer.write(f"# TYPE {self._metric_prefix}_{key}_total gauge\n")
-                buffer.write(f'{self._metric_prefix}_{key}_total{{role_name="{role_name}"}} {val}\n')
+                buffer.write(f'{self._metric_prefix}_{key}_total{{role_name="{self.role_name}"}} {val}\n')
         return buffer
 
 
@@ -1153,6 +1157,8 @@ class LifetimeRotationStrategy(SecretIdRotationStrategy):
     """Rotate when reached x percent of lifetime left."""
 
     def __init__(self, min_lifetime_percentage: int):
+        if min_lifetime_percentage < 10 or min_lifetime_percentage > 90:
+            raise ValueError(f"min_lifetime_percentage should be [10, 90] but is: {min_lifetime_percentage}")
         self.min_lifetime_percentage = min_lifetime_percentage
 
     def rotate(self, creation_time: datetime, expiration_time: datetime) -> bool:
@@ -1169,8 +1175,8 @@ class LifetimeRotationStrategy(SecretIdRotationStrategy):
             return True
 
         seconds_until_expiration = (expiration_time - datetime.now(timezone.utc)).total_seconds()
-        time_left_percent = seconds_until_expiration * 100 / lifetime_seconds
-        logging.info("secret_id lifetime reached %d%%, valid from %s until %s", time_left_percent, creation_time, expiration_time)
+        time_left_percent = seconds_until_expiration * 100. / lifetime_seconds
+        logging.info("secret_id lifetime reached %f%%, valid from %s until %s", time_left_percent, creation_time, expiration_time)
         return time_left_percent <= self.min_lifetime_percentage
 
 
