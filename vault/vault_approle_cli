@@ -67,7 +67,7 @@ class VaultClient:
         self._mount_path = mount_path
 
         if not rotation_strategy:
-            rotation_strategy = DefaultRotationStrategy()
+            rotation_strategy = StaticRotationStrategy()
         self.rotation_strategy = rotation_strategy
 
         self._http_pool = requests.Session()
@@ -242,11 +242,11 @@ class VaultClient:
         cidrs = list(set(data["cidr_list"] + data["token_bound_cidrs"]))
         metadata = data["metadata"]
 
-        percentage = -1
+        validity_period_percent = -1
         creation_time = Utils.parse_datetime(data["creation_time"])
         try:
             expiration_time = Utils.parse_datetime(data["expiration_time"])
-            percentage = (expiration_time - datetime.now(timezone.utc)).total_seconds() * 100. / (expiration_time - creation_time).total_seconds()
+            validity_period_percent = (expiration_time - datetime.now(timezone.utc)).total_seconds() * 100. / (expiration_time - creation_time).total_seconds()
         except ValueError:
             expiration_time = None
 
@@ -254,7 +254,7 @@ class VaultClient:
             "creation_time": creation_time,
             "expiration_time": expiration_time,
             "rotated_secret_id": False,
-            "percentage": percentage,
+            "validity_period_percent": validity_period_percent,
         }
 
         if self.rotation_strategy.rotate(creation_time, expiration_time):
@@ -351,10 +351,14 @@ def main() -> None:
     if args.json_output:
         json_output = JsonStdOutput()
 
+    rotation_strategy = ValidityPeriodRotationStrategy(args.min_validity_period)
+    if args.force_rotation:
+        rotation_strategy = StaticRotationStrategy()
+
     try:
         ParsingUtils.validate_args(args)
         vault_client = VaultClient(addr=args.vault_address, token=args.vault_token, mount_path=args.mount_path,
-                                   rotation_strategy=LifetimeRotationStrategy(34))
+                                   rotation_strategy=rotation_strategy)
         run(vault_client, args, json_output)
     except ValueError as err:
         logging.error("Value error: %s", err)
@@ -599,23 +603,16 @@ class CommandRotateSecretId(Command):
     @staticmethod
     def _log_rotation(rotated: bool, creation_time: datetime, expiration_time: datetime) -> None:
         """Calculates and logs information about secret_id_rotation."""
+        action = "No secret_id rotation needed"
         if rotated:
             action = "secret_id has been rotated"
-        else:
-            action = "No secret_id rotation needed"
 
         expiry_str = ""
         if expiration_time:
             expiry = expiration_time - datetime.now(timezone.utc)
             expiry_str = f", expiry in {expiry}"
 
-        logging.info(
-            "%s, creation_time: '%s', expiration_time: '%s'%s",
-            action,
-            creation_time,
-            expiration_time,
-            expiry_str,
-        )
+        logging.info("%s, creation_time: '%s', expiration_time: '%s'%s", action, creation_time, expiration_time, expiry_str)
 
 
 class Utils:
@@ -897,10 +894,9 @@ class ParsingUtils:
         #############################################################################################
         # destroy-all-secret-accessor-ids
         #############################################################################################
-        destroy_all_secret_accessor_ids = command_subparsers.add_parser(
-            CommandDestroyAllSecretIds,
-            help="Destroy all secret_id_accessors for a given role_name",
-        )
+        destroy_all_secret_accessor_ids = command_subparsers.add_parser(CommandDestroyAllSecretIds,
+                                                                        help="Destroy all secret_id_accessors for a "
+                                                                             "given role_name")
         destroy_all_secret_accessor_ids.add_argument("-r", "--role-name", required=True)
 
         #############################################################################################
@@ -921,29 +917,14 @@ class ParsingUtils:
         add_secret_id = command_subparsers.add_parser(CommandAddSecretId.cmd_id, help="Add another secret-id to a role")
         add_secret_id.add_argument("--role-name-json-path", default=".role_name")
         add_secret_id.add_argument("--secret-id-json-path", default=".secret_id")
-        add_secret_id.add_argument(
-            "-w", "--wrap-ttl", type=int, default=None,
-            help="Wraps the secret_id. Argument is specified in seconds."
-        )
-        add_secret_id.add_argument(
-            "-a",
-            "--auto-limit-cidr",
-            help="Limits secret_id usage and token_usage to CIDR blocks.",
-        )
-        add_secret_id.add_argument(
-            "-l",
-            "--limit-cidr",
-            default=[],
-            action="append",
-            help="Limits secret_id usage and token_usage to CIDR blocks.",
-        )
-        add_secret_id.add_argument(
-            "-d",
-            "--destroy-others",
-            default=False,
-            action="store_true",
-            help="Destroys other secret_id_accesors for this role.",
-        )
+        add_secret_id.add_argument("-w", "--wrap-ttl", type=int, default=None, help="Wraps the secret_id. Argument is "
+                                                                                    "specified in seconds")
+        add_secret_id.add_argument("-a", "--auto-limit-cidr", help="Perform a DNS lookup against a host and "
+                                                                   "set CIDR validity for token and login")
+        add_secret_id.add_argument("-l", "--limit-cidr", default=[], action="append", help="Limits secret_id usage and "
+                                                                                           "token_usage to CIDR blocks")
+        add_secret_id.add_argument("-d", "--destroy-others", default=False, action="store_true",
+                                   help="Destroys other secret_ids for this role")
         add_secret_id.add_argument("--metadata", nargs="*", action=KeyValueAction)
         add_secret_id.add_argument("-p", "--push-secret-id", action="store_true", default=False)
 
@@ -967,6 +948,10 @@ class ParsingUtils:
         rotate_secret_id.add_argument("--secret-id-json-path", default=".secret_id", help="JSON path to secret-id")
         rotate_secret_id.add_argument("--metric-file", help="File to write prometheus metrics to")
         rotate_secret_id.add_argument("--ignore-cidr", help="Ignore previously attached CIDRs")
+        rotate_secret_id.add_argument("--force-rotation", type="store_true", help="Force the rotation")
+        rotate_secret_id.add_argument("--min-validity-period", type=int, default=33,
+                                      help="Rotate the secret_id if the remaining validity is less than x. Value is "
+                                           "in percent (0-100)")
 
         group = rotate_secret_id.add_mutually_exclusive_group(required=True)
         group.add_argument("-s", "--secret-id", help="The secret_id to use for authentication")
@@ -1013,7 +998,7 @@ class ParsingUtils:
         if args.quiet and not args.json_output and not args.secret_id_file:
             raise ValueError("Can not use quiet=true, json=false and --secret_id")
 
-        if args.subparser_name == CMD_ADD_SECRET_ID:
+        if args.subparser_name == CommandAddSecretId.cmd_id:
             if args.wrap_ttl and (60 >= args.wrap_ttl or args.wrap_ttl > 7200):
                 raise ValueError("wrap_ttl must be 60 >= args.wrap_ttl >= 7200")
 
@@ -1093,67 +1078,33 @@ class PrometheusWrapperOutput:
         return buffer
 
 
-class DefaultRotationStrategy(SecretIdRotationStrategy):
+class StaticRotationStrategy(SecretIdRotationStrategy):
     """Always rotate."""
+    def __init__(self, rotate: bool = True):
+        self._rotate = rotate
 
     def rotate(self, creation_time: datetime, expiration_time: datetime) -> bool:
-        return True
+        return self._rotate
 
 
-class MinLifetimeRotationPolicy(SecretIdRotationStrategy):
-    """Rotate after passing x seconds until expiration time given there is an expiration time. Rotate if there's no
-    expiration time."""
+class ValidityPeriodRotationStrategy(SecretIdRotationStrategy):
+    """Rotate when reached x percent of validity period left."""
 
-    def __init__(self, min_lifetime_seconds: int):
-        self.min_lifetime_left_seconds = min_lifetime_seconds
-
-    def rotate(self, creation_time: datetime, expiration_time: datetime) -> bool:
-        if not expiration_time:
-            return True
-
-        diff = expiration_time - datetime.now(timezone.utc)
-        return self.min_lifetime_left_seconds > diff.total_seconds()
-
-
-class MaxAgeRotationStrategy(SecretIdRotationStrategy):
-    """Rotate after x seconds have passed since creation time."""
-
-    def __init__(self, max_age_seconds: int):
-        self.max_age_seconds = max_age_seconds
+    def __init__(self, min_validity_period: int):
+        if min_validity_period < 10 or min_validity_period > 90:
+            raise ValueError(f"min_lifetime_percentage should be [10, 90] but is: {min_validity_period}")
+        self.min_validity_period = min_validity_period
 
     def rotate(self, creation_time: datetime, expiration_time: datetime) -> bool:
-        if not expiration_time:
+        try:
+            lifetime_seconds = (expiration_time - creation_time).total_seconds()
+            seconds_until_expiration = (expiration_time - datetime.now(timezone.utc)).total_seconds()
+            validity_period = seconds_until_expiration * 100. / lifetime_seconds
+            logging.info("secret_id validity period at %f%%, valid from %s until %s", validity_period, creation_time, expiration_time)
+            return validity_period <= self.min_validity_period
+        except RuntimeError as err:
+            logging.error("Can not compute remaining validity period of secret_id: %s", err)
             return True
-
-        diff = datetime.now(timezone.utc) - creation_time
-        return diff.total_seconds() > self.max_age_seconds
-
-
-class LifetimeRotationStrategy(SecretIdRotationStrategy):
-    """Rotate when reached x percent of lifetime left."""
-
-    def __init__(self, min_lifetime_percentage: int):
-        if min_lifetime_percentage < 10 or min_lifetime_percentage > 90:
-            raise ValueError(f"min_lifetime_percentage should be [10, 90] but is: {min_lifetime_percentage}")
-        self.min_lifetime_percentage = min_lifetime_percentage
-
-    def rotate(self, creation_time: datetime, expiration_time: datetime) -> bool:
-        if not creation_time:
-            logging.warning("creation_time not defined, will rotate secret_id")
-            return True
-
-        if not expiration_time:
-            logging.warning("expiration_time not defined, will rotate secret_id")
-            return True
-
-        lifetime_seconds = (expiration_time - creation_time).total_seconds()
-        if lifetime_seconds == 0:
-            return True
-
-        seconds_until_expiration = (expiration_time - datetime.now(timezone.utc)).total_seconds()
-        time_left_percent = seconds_until_expiration * 100. / lifetime_seconds
-        logging.info("secret_id lifetime reached %f%%, valid from %s until %s", time_left_percent, creation_time, expiration_time)
-        return time_left_percent <= self.min_lifetime_percentage
 
 
 if __name__ == "__main__":
