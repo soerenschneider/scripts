@@ -23,24 +23,6 @@ import requests
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 
-CMD_ADD_SECRET_ID = "add-secret-id"
-CMD_LIST_SECRET_ID_ACCESSORS = "list-secret-id-accessors"
-CMD_DESTROY_ALL_SECRET_ACCESSOR_ID = "destroy-all-secret-ids"
-CMD_DESTROY_SECRET_ACCESSOR_ID = "destroy-secret-id"
-CMD_DELETE_ROLE = "delete-role"
-CMD_GET_ROLE_ID = "get-role-id"
-CMD_GET_ROLE = "get-role"
-CMD_LIST_ROLES = "list-roles"
-CMD_LOGIN_APPROLE = "login"
-CMD_LOOKUP_SECRET_ID = "lookup-secret-id"
-CMD_ROTATE_SECRET_ID = "rotate-secret-id"
-CMD_UNWRAP_SECRET_ID = "unwrap-secret-id"
-
-CMD_LIST_GROUPS = "list-groups"
-CMD_GET_GROUP = "get-group"
-
-CMD_GET_ENTITY = "get-entity"
-CMD_LIST_ENTITIES = "list-entities"
 
 TOKEN_HEADER = "X-VAULT-TOKEN"
 
@@ -344,7 +326,7 @@ class VaultClient:
 def run(vault_client: VaultClient, args: argparse.Namespace, json_output: JsonOutput) -> None:
     available_commands = {}
     for clazz in Command.__subclasses__():
-        available_commands[clazz._cmd_id] = clazz
+        available_commands[clazz.cmd_id] = clazz
 
     if args.subparser_name not in available_commands:
         raise ValueError(f"No such cmd: {args.subparser_name}")
@@ -399,7 +381,7 @@ class Command(ABC):
 
 
 class CommandListRoles(Command):
-    _cmd_id = CMD_LIST_ROLES
+    cmd_id = "list-roles"
 
     def run(self, args: argparse.Namespace) -> None:
         role_names = self.vault_client.list_role_names()
@@ -407,7 +389,7 @@ class CommandListRoles(Command):
 
 
 class CommandGetRoleId(Command):
-    _cmd_id = CMD_GET_ROLE_ID
+    cmd_id = "get-role-id"
 
     def run(self, args: argparse.Namespace) -> None:
         role_id = self.vault_client.get_role_id(args.role_name)
@@ -415,7 +397,7 @@ class CommandGetRoleId(Command):
 
 
 class CommandGetRole(Command):
-    _cmd_id = CMD_GET_ROLE
+    cmd_id = "get-role"
 
     def run(self, args: argparse.Namespace) -> None:
         logging.info("Reading info for role %s", args.role_name)
@@ -425,7 +407,7 @@ class CommandGetRole(Command):
 
 
 class CommandDeleteRole(Command):
-    _cmd_id = CMD_DELETE_ROLE
+    cmd_id = "delete-role"
 
     def run(self, args: argparse.Namespace) -> None:
         success = self.vault_client.delete_role(args.role_name)
@@ -434,7 +416,7 @@ class CommandDeleteRole(Command):
 
 
 class CommandUnwrapSecretId(Command):
-    _cmd_id = CMD_UNWRAP_SECRET_ID
+    cmd_id = "unwrap-secret-id"
 
     def run(self, args: argparse.Namespace) -> None:
         token = ParsingUtils.get_token(args)
@@ -449,7 +431,7 @@ class CommandUnwrapSecretId(Command):
 
 
 class CommandLookupSecretId(Command):
-    _cmd_id = CMD_LOOKUP_SECRET_ID
+    cmd_id = "lookup-secret-id"
 
     def run(self, args: argparse.Namespace) -> None:
         secret_id = ParsingUtils.get_secret_id(args)
@@ -459,7 +441,7 @@ class CommandLookupSecretId(Command):
 
 
 class CommandLoginApprole(Command):
-    _cmd_id = CMD_LOGIN_APPROLE
+    cmd_id = "login"
 
     def run(self, args: argparse.Namespace) -> None:
         secret_id = ParsingUtils.get_secret_id(args)
@@ -477,7 +459,7 @@ class CommandLoginApprole(Command):
 
 
 class CommandDestroySecretId(Command):
-    _cmd_id = CMD_DESTROY_SECRET_ACCESSOR_ID
+    cmd_id = "destroy-secret-id"
 
     def run(self, args: argparse.Namespace) -> None:
         if args.secret_id_accessor:
@@ -492,7 +474,7 @@ class CommandDestroySecretId(Command):
 
 
 class CommandDestroyAllSecretIds(Command):
-    _cmd_id = CMD_DESTROY_ALL_SECRET_ACCESSOR_ID
+    cmd_id = "destroy-all-secret-ids"
 
     def run(self, args: argparse.Namespace) -> None:
         destroyed, errors = self.vault_client.destroy_secret_id_accessors(args.role_name)
@@ -500,7 +482,7 @@ class CommandDestroyAllSecretIds(Command):
 
 
 class CommandListSecretIdAccessors(Command):
-    _cmd_id = CMD_LIST_SECRET_ID_ACCESSORS
+    cmd_id = "list-secret-id-accessors"
 
     def run(self, args: argparse.Namespace) -> None:
         secret_id_accessors = self.vault_client.get_secret_id_accessors(args.role_name)
@@ -508,7 +490,7 @@ class CommandListSecretIdAccessors(Command):
 
 
 class CommandListEntities(Command):
-    _cmd_id = CMD_LIST_ENTITIES
+    cmd_id = "list-entities"
 
     def run(self, args: argparse.Namespace) -> None:
         entities = self.vault_client.list_entities()
@@ -516,7 +498,7 @@ class CommandListEntities(Command):
 
 
 class CommandGetEntity(Command):
-    _cmd_id = CMD_GET_ENTITY
+    cmd_id = "get-entity"
 
     def run(self, args: argparse.Namespace) -> None:
         entity = self.vault_client.read_entity(args.entity_name)
@@ -524,7 +506,7 @@ class CommandGetEntity(Command):
 
 
 class CommandListGroups(Command):
-    _cmd_id = CMD_LIST_GROUPS
+    cmd_id = "list-groups"
 
     def run(self, args: argparse.Namespace) -> None:
         groups = self.vault_client.list_groups()
@@ -532,7 +514,7 @@ class CommandListGroups(Command):
 
 
 class CommandGetGroup(Command):
-    _cmd_id = CMD_GET_GROUP
+    cmd_id = "get-group"
 
     def run(self, args: argparse.Namespace) -> None:
         group = self.vault_client.read_group(args.group_name)
@@ -540,7 +522,7 @@ class CommandGetGroup(Command):
 
 
 class CommandAddSecretId(Command):
-    _cmd_id = CMD_ADD_SECRET_ID
+    cmd_id = "add-secret-id"
 
     def run(self, args: argparse.Namespace) -> None:
         role_name = ParsingUtils.get_role_name(args)
@@ -581,7 +563,7 @@ class CommandAddSecretId(Command):
 
 
 class CommandRotateSecretId(Command):
-    _cmd_id = CMD_ROTATE_SECRET_ID
+    cmd_id = "rotate-secret-id"
 
     def run(self, args: argparse.Namespace) -> None:
         if args.metric_file:
@@ -827,59 +809,59 @@ class ParsingUtils:
         parser.add_argument("--mount-path", default="approle")
 
         command_subparsers = parser.add_subparsers(help="sub-command help", dest="subparser_name")
-        command_subparsers.add_parser(CMD_LIST_ROLES, help="List all approles by name")
+        command_subparsers.add_parser(CommandListRoles.cmd_id, help="List all approles by name")
 
         #############################################################################################
         # get-role-id
         #############################################################################################
-        get_role_id = command_subparsers.add_parser(CMD_GET_ROLE_ID, help="Get role_id for a given approle name")
+        get_role_id = command_subparsers.add_parser(CommandGetRoleId.cmd_id, help="Get role_id for a given approle name")
         get_role_id.add_argument("-r", "--role-name", required=True)
 
         #############################################################################################
         # get-role
         #############################################################################################
-        get_role = command_subparsers.add_parser(CMD_GET_ROLE, help="Get role information for a given approle name")
+        get_role = command_subparsers.add_parser(CommandGetRole.cmd_id, help="Get role information for a given approle name")
         get_role.add_argument("-r", "--role-name", required=True)
 
         #############################################################################################
         # delete-role
         #############################################################################################
-        get_role_id = command_subparsers.add_parser(CMD_DELETE_ROLE, help="Delete an approle")
+        get_role_id = command_subparsers.add_parser(CommandDeleteRole.cmd_id, help="Delete an approle")
         get_role_id.add_argument("-r", "--role-name", required=True)
 
         #############################################################################################
         # list-secret-accessor-id
         #############################################################################################
-        list_secret_accessor_ids = command_subparsers.add_parser(CMD_LIST_SECRET_ID_ACCESSORS,
+        list_secret_accessor_ids = command_subparsers.add_parser(CommandListSecretIdAccessors.cmd_id,
                                                                  help="List all secret_id_accessors for a role")
         list_secret_accessor_ids.add_argument("-r", "--role-name", required=True)
 
         #############################################################################################
         # list-groups
         #############################################################################################
-        command_subparsers.add_parser(CMD_LIST_GROUPS, help="List all groups by name")
+        command_subparsers.add_parser(CommandListGroups.cmd_id, help="List all groups by name")
 
         #############################################################################################
         # get-group
         #############################################################################################
-        get_group = command_subparsers.add_parser(CMD_GET_GROUP, help="Get a group by name")
+        get_group = command_subparsers.add_parser(CommandListGroups.cmd_id, help="Get a group by name")
         get_group.add_argument("-n", "--group-name", required=True)
 
         #############################################################################################
         # list-entities
         #############################################################################################
-        command_subparsers.add_parser(CMD_LIST_ENTITIES, help="List all entities by name")
+        command_subparsers.add_parser(CommandListEntities.cmd_id, help="List all entities by name")
 
         #############################################################################################
         # get-entity
         #############################################################################################
-        get_entity = command_subparsers.add_parser(CMD_GET_ENTITY, help="Get an entity by name")
+        get_entity = command_subparsers.add_parser(CommandGetEntity.cmd_id, help="Get an entity by name")
         get_entity.add_argument("-n", "--entity-name", required=True)
 
         #############################################################################################
         # lookup-secret-id
         #############################################################################################
-        lookup_secret_id = command_subparsers.add_parser(CMD_LOOKUP_SECRET_ID, help="Lookup a secret_id")
+        lookup_secret_id = command_subparsers.add_parser(CommandLookupSecretId.cmd_id, help="Lookup a secret_id")
         lookup_secret_id.add_argument("-r", "--role-name", required=True)
         lookup_secret_id.add_argument("--secret-id-json-path", default=".secret_id")
         group = lookup_secret_id.add_mutually_exclusive_group(required=True)
@@ -890,7 +872,7 @@ class ParsingUtils:
         #############################################################################################
         # login
         #############################################################################################
-        login = command_subparsers.add_parser(CMD_LOGIN_APPROLE, help="Login to an approle")
+        login = command_subparsers.add_parser(CommandLoginApprole.cmd_id, help="Login to an approle")
         login.add_argument("--secret-id-json-path", default=".secret_id")
         login.add_argument("-r", "--role-id", required=True, help="role_id of the Approle to login.")
         login.add_argument("--token-file", help="Write acquired token to this file.")
@@ -903,7 +885,7 @@ class ParsingUtils:
         # destroy-secret-accessor-id
         #############################################################################################
         destroy_secret_accessor_id = command_subparsers.add_parser(
-            CMD_DESTROY_SECRET_ACCESSOR_ID,
+            CommandDestroySecretId.cmd_id,
             help="Destroy a secret_id_accessor for a given role_name",
         )
         destroy_secret_accessor_id.add_argument("-r", "--role-name", required=True)
@@ -916,7 +898,7 @@ class ParsingUtils:
         # destroy-all-secret-accessor-ids
         #############################################################################################
         destroy_all_secret_accessor_ids = command_subparsers.add_parser(
-            CMD_DESTROY_ALL_SECRET_ACCESSOR_ID,
+            CommandDestroyAllSecretIds,
             help="Destroy all secret_id_accessors for a given role_name",
         )
         destroy_all_secret_accessor_ids.add_argument("-r", "--role-name", required=True)
@@ -924,7 +906,7 @@ class ParsingUtils:
         #############################################################################################
         # unwrap-secret-id
         #############################################################################################
-        unwrap_secret_id = command_subparsers.add_parser(CMD_UNWRAP_SECRET_ID, help="Unwrap a secret_id from a token")
+        unwrap_secret_id = command_subparsers.add_parser(CommandUnwrapSecretId.cmd_id, help="Unwrap a secret_id from a token")
         group = unwrap_secret_id.add_mutually_exclusive_group(required=False)
         group.add_argument("-t", "--token")
         group.add_argument("-tf", "--token-file")
@@ -936,7 +918,7 @@ class ParsingUtils:
         #############################################################################################
         # add-secret-id
         #############################################################################################
-        add_secret_id = command_subparsers.add_parser(CMD_ADD_SECRET_ID, help="Add another secret-id to a role")
+        add_secret_id = command_subparsers.add_parser(CommandAddSecretId.cmd_id, help="Add another secret-id to a role")
         add_secret_id.add_argument("--role-name-json-path", default=".role_name")
         add_secret_id.add_argument("--secret-id-json-path", default=".secret_id")
         add_secret_id.add_argument(
@@ -979,7 +961,7 @@ class ParsingUtils:
         #############################################################################################
         # rotate-secret-id
         #############################################################################################
-        rotate_secret_id = command_subparsers.add_parser(CMD_ROTATE_SECRET_ID, help="Rotate secret-id")
+        rotate_secret_id = command_subparsers.add_parser(CommandRotateSecretId.cmd_id, help="Rotate secret-id")
         rotate_secret_id.add_argument("--role-name-json-path", default=".role_name", help="JSON path to role-name")
         rotate_secret_id.add_argument("--role-id-json-path", default=".role_id", help="JSON path to role-id")
         rotate_secret_id.add_argument("--secret-id-json-path", default=".secret_id", help="JSON path to secret-id")
@@ -1010,12 +992,6 @@ class ParsingUtils:
         if len(sys.argv) == 1:
             parser.print_help(sys.stderr)
             sys.exit(1)
-
-        # check if all config values in the file are actually recognized
-        #known_config_keys = [d.dest for d in parser._actions]
-        #for conf_file_val in config_values:
-        #    if conf_file_val not in known_config_keys:
-        #        raise ValueError(f"Unknown config key: {conf_file_val}")
 
         return parser.parse_args(remaining_argv)
 
