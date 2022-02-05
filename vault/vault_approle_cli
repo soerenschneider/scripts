@@ -23,7 +23,7 @@ import requests
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 
-
+DEFAULT_MIN_VALIDITY_PERIOD_PERCENT = 34
 TOKEN_HEADER = "X-VAULT-TOKEN"
 
 
@@ -50,7 +50,6 @@ class VaultClient:
     def __init__(self, addr: str = None,
                  token: str = None,
                  mount_path: str = "approle",
-                 rotation_strategy: SecretIdRotationStrategy = None,
                  backoff_attempts: int = 3):
         if addr:
             self._vault_address = addr
@@ -65,10 +64,6 @@ class VaultClient:
         if not mount_path:
             raise ValueError(f"Illegal mount path: {mount_path}")
         self._mount_path = mount_path
-
-        if not rotation_strategy:
-            rotation_strategy = StaticRotationStrategy()
-        self.rotation_strategy = rotation_strategy
 
         self._http_pool = requests.Session()
         # set timeout globally
@@ -236,7 +231,10 @@ class VaultClient:
 
         raise VaultException(resp.status_code, url, resp.text)
 
-    def rotate_secret_id(self, role_id: str, secret_id: str, role_name: str = None) -> Dict:
+    def rotate_secret_id(self, role_id: str, secret_id: str, role_name: str = None, rotation_strategy: SecretIdRotationStrategy = None) -> Dict:
+        if not SecretIdRotationStrategy:
+            rotation_strategy = ValidityPeriodRotationStrategy(DEFAULT_MIN_VALIDITY_PERIOD_PERCENT)
+
         self._vault_token = self.login(role_id, secret_id)
         data = self.lookup_secret_id(role_name, secret_id)
         cidrs = list(set(data["cidr_list"] + data["token_bound_cidrs"]))
@@ -257,7 +255,7 @@ class VaultClient:
             "validity_period_percent": validity_period_percent,
         }
 
-        if self.rotation_strategy.rotate(creation_time, expiration_time):
+        if rotation_strategy.rotate(creation_time, expiration_time):
             ret["vault_response"] = self.set_secret_id(
                 role_name=role_name, secret_id=None, wrap_ttl=None, cidrs=cidrs, metadata=metadata
             )
@@ -351,14 +349,9 @@ def main() -> None:
     if args.json_output:
         json_output = JsonStdOutput()
 
-    rotation_strategy = ValidityPeriodRotationStrategy(args.min_validity_period)
-    if args.force_rotation:
-        rotation_strategy = StaticRotationStrategy()
-
     try:
         ParsingUtils.validate_args(args)
-        vault_client = VaultClient(addr=args.vault_address, token=args.vault_token, mount_path=args.mount_path,
-                                   rotation_strategy=rotation_strategy)
+        vault_client = VaultClient(addr=args.vault_address, token=args.vault_token, mount_path=args.mount_path)
         run(vault_client, args, json_output)
     except ValueError as err:
         logging.error("Value error: %s", err)
@@ -578,8 +571,12 @@ class CommandRotateSecretId(Command):
         secret_id = ParsingUtils.get_secret_id(args)
         role_id = ParsingUtils.get_role_id(args)
 
-        logging.info("Creating new secret_id for role_name '%s'", role_name)
-        ret = self.vault_client.rotate_secret_id(role_id, secret_id, role_name)
+        rotation_strategy = ValidityPeriodRotationStrategy(args.min_validity_period)
+        if args.force_rotation:
+            rotation_strategy = StaticRotationStrategy()
+
+        logging.info("Creating new secret_id for role_name '%s' using strategy %s", role_name, rotation_strategy.__class__.__name__)
+        ret = self.vault_client.rotate_secret_id(role_id, secret_id, role_name, rotation_strategy=rotation_strategy)
         CommandRotateSecretId._log_rotation(ret["rotated_secret_id"], ret["creation_time"], ret["expiration_time"])
         if not ret["rotated_secret_id"]:
             # secret_id has not been rotated
@@ -949,7 +946,7 @@ class ParsingUtils:
         rotate_secret_id.add_argument("--metric-file", help="File to write prometheus metrics to")
         rotate_secret_id.add_argument("--ignore-cidr", help="Ignore previously attached CIDRs")
         rotate_secret_id.add_argument("--force-rotation", action="store_true", help="Force the rotation")
-        rotate_secret_id.add_argument("--min-validity-period", type=int, default=33,
+        rotate_secret_id.add_argument("--min-validity-period", type=int, default=DEFAULT_MIN_VALIDITY_PERIOD_PERCENT,
                                       help="Rotate the secret_id if the remaining validity is less than x. Value is "
                                            "in percent (0-100)")
 
