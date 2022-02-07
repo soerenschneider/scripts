@@ -321,7 +321,7 @@ class VaultClient:
         raise VaultException(resp.status_code, url, resp.text)
 
 
-def run(vault_client: VaultClient, args: argparse.Namespace, json_output: JsonOutput) -> None:
+def run_cmd(vault_client: VaultClient, args: argparse.Namespace, json_output: JsonOutput) -> None:
     available_commands = {}
     for clazz in Command.__subclasses__():
         available_commands[clazz.cmd_id] = clazz
@@ -329,8 +329,8 @@ def run(vault_client: VaultClient, args: argparse.Namespace, json_output: JsonOu
     if args.subparser_name not in available_commands:
         raise ValueError(f"No such cmd: {args.subparser_name}")
 
-    cmd = available_commands[args.subparser_name]
-    obj = cmd(vault_client, json_output)
+    cmd_class = available_commands[args.subparser_name]
+    obj = cmd_class(vault_client, json_output)
     obj.run(args)
 
 
@@ -345,25 +345,29 @@ def main() -> None:
     if args.quiet:
         logging.disable(logging.WARNING)
 
-    json_output = JsonDisabledOutput()
+    output = DisabledOutput()
     if args.json_output:
-        json_output = JsonStdOutput()
+        output = JsonStdOutput()
 
     try:
         ParsingUtils.validate_args(args)
         vault_client = VaultClient(addr=args.vault_address, token=args.vault_token, mount_path=args.mount_path)
-        run(vault_client, args, json_output)
+        run_cmd(vault_client, args, output)
     except ValueError as err:
         logging.error("Value error: %s", err)
-        json_output.communicate(False, {"error": f"Missing value: {err}"})
+        output.communicate(False, {"error": f"Missing value: {err}"})
         sys.exit(1)
     except VaultException as err:
         logging.error("Vault returned status_code %d for url %s: %s", err.status_code, err.url, err.text)
-        json_output.communicate(False, {"status_code": err.status_code})
+        output.communicate(False, {"status_code": err.status_code})
         sys.exit(1)
     except requests.exceptions.ConnectionError as err:
         logging.error("Could not talk to vault")
-        json_output.communicate(False, {"error": f"could not communicate with vault: {err}"})
+        output.communicate(False, {"error": f"could not communicate with vault: {err}"})
+        sys.exit(1)
+    except RuntimeError as err:
+        logging.error("Error running command: %s", err)
+        output.communicate(False, {"error": f"error running command: {err}"})
         sys.exit(1)
 
 
@@ -1008,7 +1012,7 @@ class JsonStdOutput(JsonOutput):
         print(json.dumps(pairs, default=str))
 
 
-class JsonDisabledOutput(JsonOutput):
+class DisabledOutput(JsonOutput):
     def communicate(self, success: bool, pairs: Dict) -> None:
         pass
 
@@ -1025,7 +1029,7 @@ class PrometheusWrapperOutput:
         self.role_name = role_name
 
         if not wrapper:
-            wrapper = JsonDisabledOutput()
+            wrapper = DisabledOutput()
         self.wrapper = wrapper
 
     def communicate(self, success: bool, pairs: Dict) -> None:
@@ -1067,11 +1071,16 @@ class PrometheusWrapperOutput:
                 val = val["secret_id_ttl"]
                 buffer.write(f"# HELP {self._metric_prefix}_{key}_timestamp_seconds Time until the secret_id expires in seconds\n")
                 buffer.write(f"# TYPE {self._metric_prefix}_{key}_timestamp_seconds gauge\n")
-                buffer.write(f'{self._metric_prefix}_{"secret_id_ttl"}_timestamp_seconds{{role_name="{self.role_name}"}} {val}\n')
+                buffer.write(f'{self._metric_prefix}_secret_id_ttl_timestamp_seconds{{role_name="{self.role_name}"}} {val}\n')
             else:
                 buffer.write(f"# HELP {self._metric_prefix}_{key}_total Auto-generated, sorry\n")
                 buffer.write(f"# TYPE {self._metric_prefix}_{key}_total gauge\n")
                 buffer.write(f'{self._metric_prefix}_{key}_total{{role_name="{self.role_name}"}} {val}\n')
+
+        buffer.write(f"# HELP {self._metric_prefix}_invocation_timestamp_seconds timestamp \n")
+        buffer.write(f"# TYPE {self._metric_prefix}_invocation_timestamp_seconds gauge\n")
+        buffer.write(f'{self._metric_prefix}_invocation_timestamp_seconds {{role_name="{self.role_name}"}} {val}\n')
+
         return buffer
 
 
