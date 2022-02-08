@@ -25,7 +25,7 @@ from requests.adapters import HTTPAdapter
 
 DEFAULT_MIN_VALIDITY_PERIOD_PERCENT = 34
 TOKEN_HEADER = "X-VAULT-TOKEN"
-
+BACKOFF_ATTEMPTS = 8
 
 class SecretIdRotationStrategy(ABC):
     @abstractmethod
@@ -50,7 +50,7 @@ class VaultClient:
     def __init__(self, addr: str = None,
                  token: str = None,
                  mount_path: str = "approle",
-                 backoff_attempts: int = 3):
+                 backoff_attempts: int = BACKOFF_ATTEMPTS):
         if addr:
             self._vault_address = addr
         else:
