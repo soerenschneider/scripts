@@ -49,7 +49,7 @@ class VaultException(Exception):
 class VaultClient:
     def __init__(self, addr: str = None,
                  token: str = None,
-                 mount_path: str = "approle",
+                 approle_mount_path: str = "approle",
                  backoff_attempts: int = BACKOFF_ATTEMPTS):
         if addr:
             self._vault_address = addr
@@ -60,10 +60,10 @@ class VaultClient:
 
         self._vault_token = token
 
-        # define mount path for the appengine
-        if not mount_path:
-            raise ValueError(f"Illegal mount path: {mount_path}")
-        self._mount_path = mount_path
+        # define mount path for the AppRole auth
+        if not approle_mount_path:
+            raise ValueError(f"Illegal mount path: {approle_mount_path}")
+        self._approle_mount_path = approle_mount_path
 
         self._http_pool = requests.Session()
         # set timeout globally
@@ -94,7 +94,7 @@ class VaultClient:
     def get_secret_id_accessors(self, role_name: str) -> List[str]:
         url = urllib.parse.urljoin(
             self._vault_address,
-            f"v1/auth/{self._mount_path}/role/{role_name}/secret-id?list=true",
+            f"v1/auth/{self._approle_mount_path}/role/{role_name}/secret-id?list=true",
         )
         resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
         if resp.ok:
@@ -129,7 +129,7 @@ class VaultClient:
 
         url = urllib.parse.urljoin(
             self._vault_address,
-            f"v1/auth/{self._mount_path}/role/{role_name}/{name}/destroy",
+            f"v1/auth/{self._approle_mount_path}/role/{role_name}/{name}/destroy",
         )
         resp = self._http_pool.post(
             url=url, data=data, headers={TOKEN_HEADER: self._get_vault_token()}
@@ -140,7 +140,7 @@ class VaultClient:
 
     def delete_role(self, role_name: str) -> bool:
         url = urllib.parse.urljoin(
-            self._vault_address, f"v1/auth/{self._mount_path}/role/{role_name}"
+            self._vault_address, f"v1/auth/{self._approle_mount_path}/role/{role_name}"
         )
         resp = self._http_pool.delete(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
         if resp.ok:
@@ -149,7 +149,7 @@ class VaultClient:
 
     def list_role_names(self) -> List[str]:
         url = urllib.parse.urljoin(
-            self._vault_address, f"v1/auth/{self._mount_path}/role?list=true"
+            self._vault_address, f"v1/auth/{self._approle_mount_path}/role?list=true"
         )
         resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
         if resp.ok:
@@ -161,7 +161,7 @@ class VaultClient:
 
     def get_role(self, role_name: str) -> Optional[str]:
         url = urllib.parse.urljoin(
-            self._vault_address, f"v1/auth/{self._mount_path}/role/{role_name}"
+            self._vault_address, f"v1/auth/{self._approle_mount_path}/role/{role_name}"
         )
         resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
         if resp.ok:
@@ -170,7 +170,7 @@ class VaultClient:
 
     def get_role_id(self, role_name: str) -> Optional[str]:
         url = urllib.parse.urljoin(
-            self._vault_address, f"v1/auth/{self._mount_path}/role/{role_name}/role-id"
+            self._vault_address, f"v1/auth/{self._approle_mount_path}/role/{role_name}/role-id"
         )
         resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
         if resp.ok:
@@ -199,7 +199,7 @@ class VaultClient:
             data["secret_id"] = secret_id
             endpoint = f"custom-{endpoint}"
 
-        url = urllib.parse.urljoin(self._vault_address, f"v1/auth/{self._mount_path}/role/{role_name}/{endpoint}")
+        url = urllib.parse.urljoin(self._vault_address, f"v1/auth/{self._approle_mount_path}/role/{role_name}/{endpoint}")
         headers = {TOKEN_HEADER: self._get_vault_token()}
         if wrap_ttl:
             headers["X-Vault-Wrap-TTL"] = f"{wrap_ttl}s"
@@ -224,7 +224,7 @@ class VaultClient:
             name = "secret-id"
             data["secret_id"] = secret_id
 
-        url = urllib.parse.urljoin(self._vault_address, f"v1/auth/{self._mount_path}/role/{role_name}/{name}/lookup")
+        url = urllib.parse.urljoin(self._vault_address, f"v1/auth/{self._approle_mount_path}/role/{role_name}/{name}/lookup")
         resp = self._http_pool.post(url=url, headers={TOKEN_HEADER: self._get_vault_token()}, data=data)
         if resp.ok:
             return resp.json()["data"]
@@ -279,7 +279,7 @@ class VaultClient:
 
     def login(self, role_id: str, secret_id: str) -> str:
         """ Login using an Approle. Returns the client token after successful login. """
-        url = urllib.parse.urljoin(self._vault_address, f"v1/auth/{self._mount_path}/login")
+        url = urllib.parse.urljoin(self._vault_address, f"v1/auth/{self._approle_mount_path}/login")
         data = {"role_id": role_id, "secret_id": secret_id}
         resp = self._http_pool.post(url=url, data=data)
         if resp.ok:
@@ -365,7 +365,7 @@ def main() -> None:
 
     try:
         ParsingUtils.validate_args(args)
-        vault_client = VaultClient(addr=args.vault_address, token=args.vault_token, mount_path=args.mount_path)
+        vault_client = VaultClient(addr=args.vault_address, token=args.vault_token, approle_mount_path=args.mount_path)
         run_cmd(vault_client, args, output)
     except ValueError as err:
         logging.error("Value error: %s", err)
