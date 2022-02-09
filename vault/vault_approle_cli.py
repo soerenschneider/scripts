@@ -922,7 +922,7 @@ class ParsingUtils:
         #############################################################################################
         # destroy-all-secret-accessor-ids
         #############################################################################################
-        destroy_all_secret_accessor_ids = command_subparsers.add_parser(CommandDestroyAllSecretIds,
+        destroy_all_secret_accessor_ids = command_subparsers.add_parser(CommandDestroyAllSecretIds.cmd_id,
                                                                         help="Destroy all secret_id_accessors for a "
                                                                              "given role_name")
         destroy_all_secret_accessor_ids.add_argument("-r", "--role-name", required=True)
