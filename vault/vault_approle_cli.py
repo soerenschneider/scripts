@@ -1106,7 +1106,7 @@ class PrometheusWrapperOutput:
 
         buffer.write(f"# HELP {self._metric_prefix}_invocation_timestamp_seconds timestamp \n")
         buffer.write(f"# TYPE {self._metric_prefix}_invocation_timestamp_seconds gauge\n")
-        buffer.write(f'{self._metric_prefix}_invocation_timestamp_seconds {{role_name="{self.role_name}"}} {val}\n')
+        buffer.write(f'{self._metric_prefix}_invocation_timestamp_seconds {{role_name="{self.role_name}"}} {datetime.timestamp()}\n')
 
         return buffer
 
