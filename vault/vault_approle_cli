@@ -14,18 +14,18 @@ import urllib.parse
 import uuid
 
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple, Any
 
-import iso8601
 import requests
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 
 DEFAULT_MIN_VALIDITY_PERIOD_PERCENT = 34
 TOKEN_HEADER = "X-VAULT-TOKEN"
-BACKOFF_ATTEMPTS = 8
+BACKOFF_ATTEMPTS = 12
+
 
 class SecretIdRotationStrategy(ABC):
     @abstractmethod
@@ -231,6 +231,22 @@ class VaultClient:
 
         raise VaultException(resp.status_code, url, resp.text)
 
+    @staticmethod
+    def _parse_validity_period_dates(data: Dict[str, str]) -> Tuple[Optional[datetime], Optional[datetime]]:
+        if not data or "creation_time" not in data:
+            return None, None
+
+        creation_time = Utils.parse_timestamp(data["creation_time"])
+        if creation_time and "secret_id_ttl" in data:
+            expiration_time = creation_time + timedelta(seconds=data["secret_id_ttl"])
+            return creation_time, expiration_time
+
+        try:
+            expiration_time = Utils.parse_timestamp(data["expiration_time"])
+            return creation_time, expiration_time
+        except (ValueError, KeyError):
+            return creation_time, None
+
     def rotate_secret_id(self, role_id: str, secret_id: str, role_name: str = None, rotation_strategy: SecretIdRotationStrategy = None) -> Dict:
         if not SecretIdRotationStrategy:
             rotation_strategy = ValidityPeriodRotationStrategy(DEFAULT_MIN_VALIDITY_PERIOD_PERCENT)
@@ -241,12 +257,10 @@ class VaultClient:
         metadata = data["metadata"]
 
         validity_period_percent = -1
-        creation_time = Utils.parse_datetime(data["creation_time"])
-        try:
-            expiration_time = Utils.parse_datetime(data["expiration_time"])
-            validity_period_percent = (expiration_time - datetime.now(timezone.utc)).total_seconds() * 100. / (expiration_time - creation_time).total_seconds()
-        except ValueError:
-            expiration_time = None
+        creation_time, expiration_time = VaultClient._parse_validity_period_dates(data)
+        if creation_time and expiration_time:
+            validity_period_percent = max(0., (expiration_time - datetime.now(timezone.utc)).total_seconds() * 100. / (
+                        expiration_time - creation_time).total_seconds())
 
         ret = {
             "creation_time": creation_time,
@@ -618,8 +632,21 @@ class CommandRotateSecretId(Command):
 
 class Utils:
     @staticmethod
-    def parse_datetime(date: str) -> datetime:
-        return iso8601.parse_date(date)
+    def parse_timestamp(date: str) -> Optional[datetime]:
+        try:
+            import iso8601
+            return iso8601.parse_date(date)
+        except ImportError:
+            logging.error("Could not import package 'iso8601', please consider installing it")
+        except ValueError:
+            pass
+
+        # there be dragons
+        try:
+            return datetime.strptime(date, '%Y-%m-%dT%H:%M:%S.%f%z')
+        except ValueError:
+            logging.error("Could not parse the timestamp '%s' using using strptime, please install 'iso8601'", date)
+        return None
 
     @staticmethod
     def lookup_host(hostname: str) -> List[str]:
