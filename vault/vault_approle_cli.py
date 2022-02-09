@@ -1062,7 +1062,7 @@ class PrometheusWrapperOutput:
 
     def communicate(self, success: bool, pairs: Dict) -> None:
         try:
-            pairs["success"] = 1 if success else 0
+            pairs["success"] = success
             buffer = self._collect(pairs)
             logging.info("Writing metrics to file %s", self.metric_file)
             self.write_metrics(buffer)
