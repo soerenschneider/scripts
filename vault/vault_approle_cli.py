@@ -10,6 +10,7 @@ import sys
 import shutil
 import socket
 import stat
+import time
 import urllib.parse
 import uuid
 
@@ -1106,7 +1107,7 @@ class PrometheusWrapperOutput:
 
         buffer.write(f"# HELP {self._metric_prefix}_invocation_timestamp_seconds timestamp \n")
         buffer.write(f"# TYPE {self._metric_prefix}_invocation_timestamp_seconds gauge\n")
-        buffer.write(f'{self._metric_prefix}_invocation_timestamp_seconds {{role_name="{self.role_name}"}} {datetime.timestamp()}\n')
+        buffer.write(f'{self._metric_prefix}_invocation_timestamp_seconds {{role_name="{self.role_name}"}} {time.time()}\n')
 
         return buffer
 
