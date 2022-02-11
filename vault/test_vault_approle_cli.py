@@ -1,6 +1,7 @@
 from unittest import TestCase
 import datetime
 from vault_approle_cli import VaultClient
+from vault_approle_cli import ValidityPeriodRotationStrategy
 
 
 class TestVaultClient(TestCase):
@@ -58,4 +59,63 @@ class TestVaultClient(TestCase):
 
         ret = VaultClient._parse_validity_period_dates(data)
         assert ret == (None, None)
+
+
+class TestValidityPeriodRotationStrategy(TestCase):
+    def test_rotate_invalid_arg(self):
+        try:
+            ValidityPeriodRotationStrategy(100)
+        except ValueError:
+            return
+        self.fail("expected exception")
+
+    def test_rotate_empty_args(self):
+        impl = ValidityPeriodRotationStrategy(50)
+        self.assertTrue(impl.rotate(None, None))
+
+    def test_rotate_empty_creation(self):
+        impl = ValidityPeriodRotationStrategy(50)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        expiry = now + datetime.timedelta(hours=24)
+
+        self.assertTrue(impl.rotate(None, expiry))
+
+    def test_rotate_empty_expiry(self):
+        impl = ValidityPeriodRotationStrategy(50)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        creation = now + datetime.timedelta(hours=24)
+
+        self.assertTrue(impl.rotate(creation, None))
+
+    def test_rotate_almost_zero(self):
+        impl = ValidityPeriodRotationStrategy(50)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        creation = now
+        expiry = now + datetime.timedelta(hours=24)
+
+        self.assertFalse(impl.rotate(creation, expiry))
+
+    def test_rotate_almost_75_percent_validity_period(self):
+        impl = ValidityPeriodRotationStrategy(50)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        creation = now - datetime.timedelta(hours=3)
+        expiry = now + datetime.timedelta(hours=1)
+
+        self.assertTrue(impl.rotate(creation, expiry))
+
+    def test_rotate_expiry_passed(self):
+        impl = ValidityPeriodRotationStrategy(50)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        creation = now - datetime.timedelta(hours=3)
+        expiry = now - datetime.timedelta(hours=1)
+
+        self.assertTrue(impl.rotate(creation, expiry))
+
+    def test_rotate_mixed_up_params(self):
+        impl = ValidityPeriodRotationStrategy(50)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        creation = now - datetime.timedelta(hours=3)
+        expiry = now + datetime.timedelta(hours=1)
+
+        self.assertTrue(impl.rotate(expiry, creation))
 

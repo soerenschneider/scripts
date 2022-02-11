@@ -237,16 +237,23 @@ class VaultClient:
         if not data or "creation_time" not in data:
             return None, None
 
-        creation_time = Utils.parse_timestamp(data["creation_time"])
+        try:
+            creation_time = Utils.parse_timestamp(data["creation_time"])
+        except (ValueError, KeyError, TypeError):
+            logging.error("creation_time and expiration_time could not be parsed")
+            return None, None
+
         if creation_time and "secret_id_ttl" in data:
             expiration_time = creation_time + timedelta(seconds=data["secret_id_ttl"])
             return creation_time, expiration_time
 
         try:
             expiration_time = Utils.parse_timestamp(data["expiration_time"])
-            return creation_time, expiration_time
-        except (ValueError, KeyError):
+        except (ValueError, KeyError, TypeError):
+            logging.error("creation_time and expiration_time could not be parsed")
             return creation_time, None
+
+        return creation_time, expiration_time
 
     def rotate_secret_id(self, role_id: str, secret_id: str, role_name: str = None, rotation_strategy: SecretIdRotationStrategy = None) -> Dict:
         if not SecretIdRotationStrategy:
@@ -268,6 +275,7 @@ class VaultClient:
             "expiration_time": expiration_time,
             "rotated_secret_id": False,
             "validity_period_percent": validity_period_percent,
+            "parsing_errors": 1 if not creation_time or not expiration_time else 0
         }
 
         if rotation_strategy.rotate(creation_time, expiration_time):
@@ -379,10 +387,6 @@ def main() -> None:
     except requests.exceptions.ConnectionError as err:
         logging.error("Could not talk to vault")
         output.communicate(False, {"error": f"could not communicate with vault: {err}"})
-        sys.exit(1)
-    except RuntimeError as err:
-        logging.error("Error running command: %s", err)
-        output.communicate(False, {"error": f"error running command: {err}"})
         sys.exit(1)
 
 
@@ -633,21 +637,22 @@ class CommandRotateSecretId(Command):
 
 class Utils:
     @staticmethod
-    def parse_timestamp(date: str) -> Optional[datetime]:
+    def parse_timestamp(timestamp: str) -> Optional[datetime]:
         try:
             import iso8601
-            return iso8601.parse_date(date)
+            return iso8601.parse_date(timestamp)
         except ImportError:
             logging.error("Could not import package 'iso8601', please consider installing it")
-        except ValueError:
+        except Exception:
             pass
 
-        # there be dragons
+        # here be dragons
         try:
-            return datetime.strptime(date, '%Y-%m-%dT%H:%M:%S.%f%z')
+            return datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S.%f%z')
         except ValueError:
-            logging.error("Could not parse the timestamp '%s' using using strptime, please install 'iso8601'", date)
-        return None
+            logging.error("Could not parse the timestamp '%s' using using strptime, please install 'iso8601'", timestamp)
+
+        raise ValueError(f"Could not parse timestamp '{timestamp}'")
 
     @staticmethod
     def lookup_host(hostname: str) -> List[str]:
@@ -1066,7 +1071,7 @@ class PrometheusWrapperOutput:
             buffer = self._collect(pairs)
             logging.info("Writing metrics to file %s", self.metric_file)
             self.write_metrics(buffer)
-        except RuntimeError as err:
+        except OSError as err:
             logging.error("Could not write metrics: %s", err)
 
         self.wrapper.communicate(success, pairs)
@@ -1134,10 +1139,13 @@ class ValidityPeriodRotationStrategy(SecretIdRotationStrategy):
         try:
             lifetime_seconds = (expiration_time - creation_time).total_seconds()
             seconds_until_expiration = (expiration_time - datetime.now(timezone.utc)).total_seconds()
+            if seconds_until_expiration <= 0:
+                return True
+
             validity_period = seconds_until_expiration * 100. / lifetime_seconds
             logging.info("secret_id validity period at %f%%, valid from %s until %s", validity_period, creation_time, expiration_time)
             return validity_period <= self.min_validity_period
-        except RuntimeError as err:
+        except TypeError as err:
             logging.error("Can not compute remaining validity period of secret_id: %s", err)
             return True
 
