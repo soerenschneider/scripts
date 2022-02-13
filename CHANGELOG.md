@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.3.0](https://www.github.com/soerenschneider/scripts/compare/v1.2.1...v1.3.0) (2022-02-13)
+
+
+### Features
+
+* Add further commands ([939f04a](https://www.github.com/soerenschneider/scripts/commit/939f04acde38bab76c4e0150559b7b93add89ad9))
+* Add success metric ([24f3ab6](https://www.github.com/soerenschneider/scripts/commit/24f3ab657c5687985410df93e7a5df13db767d37))
+* first draft of script to reset wg peers ([025cfa1](https://www.github.com/soerenschneider/scripts/commit/025cfa1d68ff0640e8da0c1fa3be5e8f1aa0e97f))
+
+
+### Bug Fixes
+
+* fix help message ([9138475](https://www.github.com/soerenschneider/scripts/commit/9138475c291da8bffbed19dad57769e541505905))
+* fix missing parameter ([2e32c30](https://www.github.com/soerenschneider/scripts/commit/2e32c3018b038dca4734c9262ec5f0082e3ff380))
+* fix timestamp generation ([f4be30d](https://www.github.com/soerenschneider/scripts/commit/f4be30de2195144ca8d2e96409b72673f9668726))
+* require both role_id and role_name for cmd rotate-secret-id ([82db6d2](https://www.github.com/soerenschneider/scripts/commit/82db6d25e9708cd6078f7ee6f4f633b325d42d5c))
+* use correct arg ([8a1f08a](https://www.github.com/soerenschneider/scripts/commit/8a1f08ac66e48189f08475927b371a38a133635c))
+* write correct timestamp ([3fde058](https://www.github.com/soerenschneider/scripts/commit/3fde0582d41ce166eb083f2b0d95f16c26001676))
+
 ### [1.2.1](https://www.github.com/soerenschneider/scripts/compare/v1.2.0...v1.2.1) (2022-01-24)
 
 
