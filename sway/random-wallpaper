@@ -1,0 +1,5 @@
+#!/bin/sh
+
+WALLPAPER_DIR="$(xdg-user-dir PICTURES)/wallpapers"
+
+find "${WALLPAPER_DIR}" -regex  '.*\(png\|jp.*g\)$' | sort -R | head -n1
