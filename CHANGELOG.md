@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://www.github.com/soerenschneider/scripts/compare/v1.3.0...v1.4.0) (2022-03-09)
+
+
+### Features
+
+* add script to get a random wallpaper ([dbb5a1c](https://www.github.com/soerenschneider/scripts/commit/dbb5a1c194432b3c4d265622d8579ac8e24c588f))
+
 ## [1.3.0](https://www.github.com/soerenschneider/scripts/compare/v1.2.1...v1.3.0) (2022-02-13)
 
 
