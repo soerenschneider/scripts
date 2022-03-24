@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="refresh" content="600">
+    <link rel="shortcut icon" href="favicon.ico"/>
+<style>
+html, body {
+    height: 100%;
+    margin: 0px;
+    padding: 0px;
+    font-size: 100%;
+    font-family: "Lucida Console", monospace;
+}
+
+table, th, td {
+    border: 0px;
+    border-collapse: collapse;
+}
+
+h3 {
+    text-align: center;
+}
+
+#container {
+    width: 100%;
+    display: flex;
+    font-size: 1.05em;
+}
+
+.todo {
+    float: left;
+    width: 33.33%;
+    height: 100%;
+    align-items: stretch;
+    background-color: {{ data.colors.todo.bg }};
+}
+
+.todo tr:nth-child(even) {
+    background-color: {{ data.colors.todo.nth_bg }};
+    color: {{ data.colors.todo.nth_fg }};
+}
+
+.started {
+    float: left;
+    width: 33.33%;
+    align-items: stretch;
+    background-color: {{ data.colors.started.bg }};
+}
+
+.started tr:nth-child(even) {
+    background-color: {{ data.colors.started.nth_bg }};
+    color: {{ data.colors.started.nth_fg }};
+}
+
+.completed {
+    float: left;
+    width: 33.33%;
+    align-items: stretch;
+    background-color: {{ data.colors.completed.bg }};
+}
+
+.completed tr:nth-child(even) {
+    background-color: {{ data.colors.completed.nth_bg }};
+    color: {{ data.colors.completed.nth_fg }};
+}
+
+.project {
+    font-size: 0.5em;
+    font-style: italic;
+    vertical-align: super;
+}
+
+.due_date {
+    font-size: 0.7em;
+    font-style: italic;
+}
+
+.warning {
+    font-size: 2em;
+    font-style: normal;
+    font-weight: bold;
+    color: #ff00ff;
+}
+
+</style>
+<title>Taskwarrior Personal Kanban Board</title>
+</head>
+
+<body>
+<div id='container'>
+<div class="todo">
+  <h3>Not started</h3>
+  <table width='100%'>
+  {% for task in data.todo_tasks %}
+  <tr><td>{{ loop.index }}.</td>
+      <td>{{ task.description }}
+          {% if 'project' in task %}
+          <span class='project'>[{{ task.project }}]</span>
+          {% endif %}
+          {% if 'due' in task %}
+          {% if task.due == 0 %}
+          <span class='warning'>⚠ </span><span class='due_date'>(Due today)</span>
+          {% elif task.due < 0 %}
+          <span class='due_date'>(Overdue)</span>
+          {% else %}
+          <span class='due_date'>(Due in {{ task.due }} days)</span>
+          {% endif %}
+          {% endif %}
+      </td>
+  </tr>
+  {% endfor %}
+  </table>
+</div>
+<div class="started">
+  <h3>In progress</h3>
+  <table width='100%'>
+  {% for task in data.started_tasks %}
+  <tr><td>{{ loop.index }}.</td>
+      <td>{{ task.description }}
+          {% if 'project' in task %}
+          <span class='project'>[{{ task.project }}]</span>
+          {% endif %}
+          {% if 'due' in task %}
+          {% if task.due == 0 %}
+          <span class='warning'>⚠ </span><span class='due_date'>(Due today)</span>
+          {% elif task.due < 0 %}
+          <span class='due_date'>(Overdue)</span>
+          {% else %}
+          <span class='due_date'>(Due in {{ task.due }} days)</span>
+          {% endif %}
+          {% endif %}
+      </td>
+  </tr>
+  {% endfor %}
+  </table>
+</div>
+<div class="completed">
+  <h3>Done</h3>
+  <table width='100%'>
+  {% for task in data.completed_tasks %}
+  <tr><td>{{ loop.index }}.</td>
+      <td><s>{{ task.description }}</s>
+          {% if 'project' in task %}
+          <span class='project'>[{{ task.project }}]</span>
+          {% endif %}
+      </td>
+  </tr>
+  {% endfor %}
+  </table>
+</div>
+</div>
+<div style="background-color: #0e9aa7">
+<span align="center">Updated: {{ data.timestamp }}</span>
+</div>
+</body>
+</html>
+
