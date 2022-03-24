@@ -70,7 +70,7 @@ class VaultClient:
         # set timeout globally
         self._http_pool.request = functools.partial(self._http_pool.request, timeout=10)
         if backoff_attempts:
-            retries = Retry(total=backoff_attempts, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+            retries = Retry(total=backoff_attempts, backoff_factor=1, status_forcelist=[412, 500, 502, 503, 504])
             self._http_pool.mount("http://", HTTPAdapter(max_retries=retries))
             self._http_pool.mount("https://", HTTPAdapter(max_retries=retries))
 
