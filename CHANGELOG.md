@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.5.0](https://www.github.com/soerenschneider/scripts/compare/v1.4.0...v1.5.0) (2022-03-24)
+
+
+### Features
+
+* Add daily script ([d6af26e](https://www.github.com/soerenschneider/scripts/commit/d6af26e349bd747d95252b60284923ed406db644))
+* add taskwarrior-gen-kanban script ([561d59a](https://www.github.com/soerenschneider/scripts/commit/561d59a0b05859619103e0725bd0ee2addce9004))
+* Compatibility with vault tokens v1.10 ([70b367f](https://www.github.com/soerenschneider/scripts/commit/70b367fc0b7556e61b1b290070c9f38609bb3968))
+
 ## [1.4.0](https://www.github.com/soerenschneider/scripts/compare/v1.3.0...v1.4.0) (2022-03-09)
 
 
