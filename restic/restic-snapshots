@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+PROFILE="/etc/restic-$1.conf"
+
+if [ -z "$1" ]; then
+	"You must supply a restic profile"
+	exit 1
+fi
+
+if [ ! -f "${PROFILE}" ]; then
+	"Restic profile '${PROFILE} 'not found"
+	exit 1
+fi
+
+env $(cat "${PROFILE}" | xargs) restic snapshots

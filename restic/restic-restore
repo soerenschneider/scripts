@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+PROFILE_NAME=$1
+PROFILE=/etc/restic-$1.conf
+TARGET=$2
+ID=${3:-latest}
+
+if [ -z "$1" ]; then
+	"You must supply a restic profile"
+	exit 1
+fi
+
+if [ -z "${TARGET}" ]; then
+	"You must supply a target folder"
+	exit 1
+fi
+
+if [ ! -f "${PROFILE}" ]; then
+	"Restic profile not found at ${PROFILE}"
+	exit 1
+fi
+
+prompt_confirmation() {
+	echo "Trying to restore restic backup '${PROFILE_NAME}' with id '${ID}' to '${TARGET}'"
+        echo "All existing files will be overwritten"
+	read -r -t 15 -n 1 -p "Is that correct? (y/N)? " answer
+	echo
+	case ${answer:0:1} in
+	    y|Y )
+		return
+	    ;;
+	    * )
+		echo "Ok, aborting."
+		exit 0
+	    ;;
+	esac
+}
+
+prompt_confirmation
+env $(cat "${PROFILE}" | xargs) restic restore "${ID}" --target "${TARGET}"
