@@ -99,8 +99,8 @@ h3 {
           <span class='project'>[{{ task.project }}]</span>
           {% endif %}
           {% if 'due' in task %}
-          {% if task.due == 0 %}
-          <span class='warning'>⚠ </span><span class='due_date'>(Due today)</span>
+          {% if task.due <= 0 %}
+          <span class='warning'>&#9888; </span><span class='due_date'>(Due today)</span>
           {% elif task.due < 0 %}
           <span class='due_date'>(Overdue)</span>
           {% else %}
