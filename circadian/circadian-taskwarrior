@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+THEME="$1"
+
+set -eu
+
+if [ -z "${THEME}" ]; then
+    echo "no theme provided"
+    exit 1
+fi
+
+sed -i -e "s#^include \~/\.task/.*.theme\$#include ~/.task/${THEME}.theme#g" ~/.taskrc

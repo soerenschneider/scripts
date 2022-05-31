@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+THEME="$1"
+
+set -eu
+
+SUN_DOWN=20
+SUN_UP=8
+
+guess_theme() {
+	if [ $(date +%m) -gt 3 ] || [ $(date +%m) -lt 10 ]; then
+	    SUN_DOWN=17
+	    SUN_UP=9
+	fi
+
+	if [ $(date +%H) -gt ${SUN_DOWN} ] || [ $(date +%H) -lt ${SUN_UP} ]; then
+	    echo dark; 
+	else 
+	    echo light;
+	fi
+}
+
+if [ -z "${THEME}" ]; then
+	THEME=$(guess_theme)
+fi
+
+circadian-alacritty "${THEME}"
+circadian-taskwarrior "${THEME}"
