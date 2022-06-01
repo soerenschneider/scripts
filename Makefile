@@ -4,3 +4,7 @@ pre-commit-init:
 
 pre-commit-update:
 	pre-commit autoupdate
+
+install:
+	python3 -m venv --upgrade venv
+	venv/bin/pip3 install -r requirements.txt
