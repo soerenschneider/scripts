@@ -7,9 +7,10 @@ import logging
 import subprocess
 import sys
 
-from suntime import Sun
 import daemon
-import daemon.pidfile
+from suntime import Sun
+
+SLEEP = 60
 
 
 def get_theme(sunrise: datetime, sunset: datetime) -> str:
@@ -23,42 +24,61 @@ def get_theme(sunrise: datetime, sunset: datetime) -> str:
     return "dark"
 
 
-def change_theme(theme: str) -> None:
+def change_theme(theme: str) -> bool:
     try:
         subprocess.run(["circadian-set-theme", theme])
+        return True
     except Exception as err:
         logging.error("Couldn't change theme: %s", err)
+    return False
 
 
 def main(latitude: float, longitude: float, daemonize: bool = True) -> None:
     sun = Sun(latitude, longitude)
 
     prev_theme = "unknown"
-    while True:
-        sunrise = sun.get_sunrise_time()
-        sunset = sun.get_sunset_time()
+    sunrise = sun.get_sunrise_time()
+    sunset = sun.get_sunset_time()
 
+    while True:
         theme = get_theme(sunrise, sunset)
         if theme != prev_theme:
             logging.info("changing theme from %s to %s", prev_theme, theme)
-            change_theme(theme)
-            prev_theme = theme
+            if change_theme(theme):
+                prev_theme = theme
+                sunrise = sun.get_sunrise_time()
+                sunset = sun.get_sunset_time()
+                logging.info("next sunrise '%s', next sunset '%s'", sunrise, sunset)
 
         if not daemonize:
             return
 
         try:
-            time.sleep(300)
+            time.sleep(SLEEP)
         except KeyboardInterrupt:
             return
 
 
+def _argparse_coordinate_lat(astring: str) -> float:
+    arg = float(astring)
+    if arg < -90 or arg > 90:
+        raise ValueError
+    return arg
+
+
+def _argparse_coordinate_long(astring: float) -> float:
+    arg = float(astring)
+    if arg < -180 or arg > 180:
+        raise ValueError
+    return arg
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='circadian-daemon')
-    parser.add_argument('--lat', dest='latitude', type=float, action='store', required=True, metavar='',
-                        choices=range(-90, 91), help="Set the latitude from [-90, 90]")
-    parser.add_argument('--long', dest='longitude', type=float, action='store', required=True, metavar='',
-                        choices=range(-180, 181), help="Set the longitude from [-180, 180]")
+    parser.add_argument('--lat', dest='latitude', type=_argparse_coordinate_lat, action='store', required=True, metavar='',
+                        help="Set the latitude from [-90, 90]")
+    parser.add_argument('--long', dest='longitude', type=_argparse_coordinate_long, action='store', required=True, metavar='',
+                        help="Set the longitude from [-180, 180]")
     parser.add_argument('--daemonize', '-d', dest='daemonize', default=False, action='store_true',
                         help="Run in background")
     parser.add_argument('--quiet', '-q', dest='quiet', default=False, action='store_true',
