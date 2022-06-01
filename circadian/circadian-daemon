@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+
+import argparse
+import datetime
+import time
+import logging
+import subprocess
+import sys
+
+from suntime import Sun
+import daemon
+import daemon.pidfile
+
+
+def get_theme(sunrise: datetime, sunset: datetime) -> str:
+    if not sunrise or not sunset:
+        raise ValueError
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if sunrise <= now <= sunset:
+        return "light"
+
+    return "dark"
+
+
+def change_theme(theme: str) -> None:
+    try:
+        subprocess.run(["circada-theme", theme])
+    except Exception as err:
+        logging.error("Couldn't change theme: %s", err)
+
+
+def main(latitude: float, longitude: float, daemonize: bool = True) -> None:
+    sun = Sun(latitude, longitude)
+
+    prev_theme = "unknown"
+    while True:
+        sunrise = sun.get_sunrise_time()
+        sunset = sun.get_sunset_time()
+
+        theme = get_theme(sunrise, sunset)
+        if theme != prev_theme:
+            logging.info("changing theme from %s to %s", prev_theme, theme)
+            change_theme(theme)
+            prev_theme = theme
+
+        if not daemonize:
+            return
+
+        try:
+            time.sleep(300)
+        except KeyboardInterrupt:
+            return
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser.add_argument('--lat', dest='latitude', type=float, action='store', required=True)
+    parser.add_argument('--long', dest='longitude', type=float, action='store', required=True)
+    parser.add_argument('--daemonize', '-d', dest='daemonize', default=False, action='store_true')
+    parser.add_argument('--quiet', '-q', dest='quiet', default=False, action='store_true')
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
+    args = parse_args()
+
+    if args.daemonize:
+        logging.info("Running as daemon")
+        stdout, stderr = None, None
+        if not args.quiet:
+            stdout = sys.stdout
+            stderr = sys.stderr
+        with daemon.DaemonContext(stdout=stdout, stderr=stderr):
+            main(args.latitude, args.longitude, args.daemonize)
+    else:
+        main(args.latitude, args.longitude, True)
