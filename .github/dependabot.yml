@@ -1,6 +1,6 @@
 version: 2
 updates:
   - package-ecosystem: "pip"
-    directory: "/gh-upload-assets"
+    directory: "/"
     schedule:
       interval: "weekly"
