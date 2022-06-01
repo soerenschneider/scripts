@@ -3,7 +3,7 @@ suntime==1.2.5
 python-daemon==2.3.0
 
 # daily
-pyfzf==0.2.2
+pyfzf==0.3.1
 
 # github
 requests==2.27.1
