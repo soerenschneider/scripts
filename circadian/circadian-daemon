@@ -54,11 +54,15 @@ def main(latitude: float, longitude: float, daemonize: bool = True) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument('--lat', dest='latitude', type=float, action='store', required=True)
-    parser.add_argument('--long', dest='longitude', type=float, action='store', required=True)
-    parser.add_argument('--daemonize', '-d', dest='daemonize', default=False, action='store_true')
-    parser.add_argument('--quiet', '-q', dest='quiet', default=False, action='store_true')
+    parser = argparse.ArgumentParser(description='circadian-daemon')
+    parser.add_argument('--lat', dest='latitude', type=float, action='store', required=True, metavar='',
+                        choices=range(-90, 90), help="Set the latitude from [-90, 90]")
+    parser.add_argument('--long', dest='longitude', type=float, action='store', required=True, metavar='',
+                        choices=range(-180, 180), help="Set the longitude from [-180, 180]")
+    parser.add_argument('--daemonize', '-d', dest='daemonize', default=False, action='store_true',
+                        help="Run in background")
+    parser.add_argument('--quiet', '-q', dest='quiet', default=False, action='store_true',
+                        help="Make the daemon not print messages to stdout and stderr")
     return parser.parse_args()
 
 
