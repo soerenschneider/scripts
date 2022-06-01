@@ -1,0 +1,13 @@
+# circadian
+suntime==1.2.5
+python-daemon==2.3.0
+
+# daily
+pyfzf==0.2.2
+
+# github
+requests==2.27.1
+backoff==2.0.1
+
+# taskwarrior
+jinja2==3.1.2
