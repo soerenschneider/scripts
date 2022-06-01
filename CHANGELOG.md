@@ -1,5 +1,13 @@
 # Changelog
 
+### [1.5.1](https://www.github.com/soerenschneider/scripts/compare/v1.5.0...v1.5.1) (2022-06-01)
+
+
+### Bug Fixes
+
+* call correct script ([08046cd](https://www.github.com/soerenschneider/scripts/commit/08046cd828124c4e9ef5307afff0510176016cec))
+* use correct range for validation ([f33c73e](https://www.github.com/soerenschneider/scripts/commit/f33c73e699996519668ed3e87c6465f87ade8dbb))
+
 ## [1.5.0](https://www.github.com/soerenschneider/scripts/compare/v1.4.0...v1.5.0) (2022-03-24)
 
 
