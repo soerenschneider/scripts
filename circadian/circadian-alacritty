@@ -9,4 +9,4 @@ if [ -z "${THEME}" ]; then
     exit 1
 fi
 
-sed -i -e "s#^colors: \*.*#colors: *${THEME}#g" ~/.alacritty.yml
+sed -i --follow-symlinks -e "s#^colors: \*.*#colors: *${THEME}#g" ~/.alacritty.yml

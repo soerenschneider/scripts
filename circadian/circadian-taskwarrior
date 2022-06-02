@@ -9,4 +9,4 @@ if [ -z "${THEME}" ]; then
     exit 1
 fi
 
-sed -i -e "s#^include \~/\.task/.*.theme\$#include ~/.task/${THEME}.theme#g" ~/.taskrc
+sed -i --follow-symlinks -e "s#^include \~/\.task/.*.theme\$#include ~/.task/${THEME}.theme#g" ~/.taskrc
