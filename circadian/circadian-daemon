@@ -2,15 +2,70 @@
 
 import argparse
 import datetime
-import time
+import json
 import logging
+import time
 import subprocess
 import sys
 
+from lockfile import LockFailed, AlreadyLocked
+
 import daemon
+from daemon.pidfile import TimeoutPIDLockFile
 from suntime import Sun
 
 SLEEP = 60
+
+
+def main() -> None:
+    logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
+    args = parse_args()
+    validate_args(args)
+
+    if not args.daemonize:
+        observe(args.latitude,
+                args.longitude,
+                sunrise_offset=args.sunrise_offset,
+                sunset_offset=args.sunset_offset,
+                daemonize=args.daemonize)
+        return
+
+    logging.info("Running as daemon")
+    run_as_daemon(args)
+
+
+def _log_events(sunrise: datetime.datetime, sunset: datetime.datetime) -> None:
+    fmt = "%H:%M %Z"
+    logging.info("Today's sunrise event at %s, sunset at %s", sunrise.strftime(fmt), sunset.strftime(fmt))
+
+
+def observe(latitude: float, longitude: float, sunrise_offset: int = 0, sunset_offset: int = 0, daemonize: bool = True) -> None:
+    sun = Sun(latitude, longitude)
+
+    prev_theme = "unknown"
+    sunrise = get_offset(sun.get_sunrise_time(), sunrise_offset)
+    sunset = get_offset(sun.get_sunset_time(), sunset_offset)
+    _log_events(sunrise, sunset)
+
+    while True:
+        theme = get_theme(sunrise, sunset)
+        if theme != prev_theme:
+            logging.info("changing theme from %s to %s", prev_theme, theme)
+            if change_theme(theme):
+                prev_theme = theme
+
+                # recalculate sunrise and sunset
+                sunrise = get_offset(sun.get_sunrise_time(), sunrise_offset)
+                sunset = get_offset(sun.get_sunset_time(), sunset_offset)
+                _log_events(sunrise, sunset)
+
+        if not daemonize:
+            return
+
+        try:
+            time.sleep(SLEEP)
+        except KeyboardInterrupt:
+            return
 
 
 def get_theme(sunrise: datetime, sunset: datetime) -> str:
@@ -33,70 +88,101 @@ def change_theme(theme: str) -> bool:
     return False
 
 
-def main(latitude: float, longitude: float, daemonize: bool = True) -> None:
-    sun = Sun(latitude, longitude)
-
-    prev_theme = "unknown"
-    sunrise = sun.get_sunrise_time()
-    sunset = sun.get_sunset_time()
-
-    while True:
-        theme = get_theme(sunrise, sunset)
-        if theme != prev_theme:
-            logging.info("changing theme from %s to %s", prev_theme, theme)
-            if change_theme(theme):
-                prev_theme = theme
-                sunrise = sun.get_sunrise_time()
-                sunset = sun.get_sunset_time()
-                logging.info("next sunrise '%s', next sunset '%s'", sunrise, sunset)
-
-        if not daemonize:
-            return
-
-        try:
-            time.sleep(SLEEP)
-        except KeyboardInterrupt:
-            return
+def get_offset(date: datetime.datetime, offset_minutes: int) -> datetime.datetime:
+    return date + datetime.timedelta(minutes=offset_minutes)
 
 
-def _argparse_coordinate_lat(astring: str) -> float:
-    arg = float(astring)
-    if arg < -90 or arg > 90:
-        raise ValueError
-    return arg
+def _validate_coordinate_lat(lat: float) -> None:
+    if not lat:
+        raise ValueError("no 'longitude' given")
+
+    if lat < -90 or lat > 90:
+        raise ValueError("latitude must be [-90, 90]")
 
 
-def _argparse_coordinate_long(astring: float) -> float:
-    arg = float(astring)
-    if arg < -180 or arg > 180:
-        raise ValueError
-    return arg
+def _validate_coordinate_long(long: float) -> None:
+    if not long:
+        raise ValueError("no 'longitude' given")
+
+    if long < -180 or long > 180:
+        raise ValueError("longitude must be [-180, 180]")
+
+
+def _validate_offset(arg: int) -> None:
+    if not arg:
+        return
+
+    if arg < -120 or arg > 120:
+        raise ValueError("offset must not be within [-120, 120] minutes")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='circadian-daemon')
-    parser.add_argument('--lat', dest='latitude', type=_argparse_coordinate_lat, action='store', required=True, metavar='',
-                        help="Set the latitude from [-90, 90]")
-    parser.add_argument('--long', dest='longitude', type=_argparse_coordinate_long, action='store', required=True, metavar='',
-                        help="Set the longitude from [-180, 180]")
+    parser.add_argument('--conf', '-c', action='append', help="Read arguments from a JSON-encoded config file")
+    parser.add_argument('--latitude', dest='latitude', type=float, action='store', required=False, metavar='',
+                        help="Set the latitude from [-90.0, 90.0]")
+    parser.add_argument('--longitude', dest='longitude', type=float, action='store', required=False, metavar='',
+                        help="Set the longitude from [-180.0, 180.0]")
     parser.add_argument('--daemonize', '-d', dest='daemonize', default=False, action='store_true',
-                        help="Run in background")
+                        help="Daemonize and run in background")
+    parser.add_argument('--pid', '-p', type=str, dest="pidfile", default="/var/run/circadian-daemon.pid",
+                        help="File to write the PID to")
     parser.add_argument('--quiet', '-q', dest='quiet', default=False, action='store_true',
                         help="Make the daemon not print messages to stdout and stderr")
-    return parser.parse_args()
+    parser.add_argument('--sunset-offset', '-s', dest="sunset_offset", type=int, default=0,
+                        help="Offset in minutes for the sunset. Negative values translate to an earlier dark mode, "
+                             "positive values delay dark mode.")
+    parser.add_argument('--sunrise-offset', '-r', dest="sunrise_offset", type=int, default=0,
+                        help="Offset in minutes for the sunrise. Negative values translate to an earlier light mode, "
+                             "positive values delay light mode."
+                        )
+
+    args = parser.parse_args()
+    if args.conf is not None:
+        for conf_fname in args.conf:
+            with open(conf_fname, 'r') as f:
+                parser.set_defaults(**json.load(f))
+
+        # Reload arguments to override config file values with command line values
+        return parser.parse_args()
+    return args
+
+
+def validate_args(args: argparse.Namespace) -> None:
+    try:
+        _validate_coordinate_long(args.longitude)
+        _validate_coordinate_long(args.latitude)
+        _validate_offset(args.sunrise_offset)
+        _validate_offset(args.sunset_offset)
+    except ValueError as err:
+        logging.error("Invalid arguments: %s", err)
+        sys.exit(1)
+
+
+def run_as_daemon(args: argparse.Namespace) -> None:
+    stdout, stderr = None, None
+    if not args.quiet:
+        stdout = sys.stdout
+        stderr = sys.stderr
+
+    pid = TimeoutPIDLockFile(args.pidfile)
+    try:
+        with daemon.DaemonContext(stdout=stdout, stderr=stderr, pidfile=pid):
+            observe(args.latitude,
+                    args.longitude,
+                    sunrise_offset=args.sunrise_offset,
+                    sunset_offset=args.sunset_offset,
+                    daemonize=args.daemonize)
+
+    except LockFailed as err:
+        logging.error("can't acquire lock: %s", err)
+        logging.error("shutting down")
+        sys.exit(1)
+    except AlreadyLocked as err:
+        logging.error("circadian-daemon already running: %s", err)
+        logging.error("shutting down")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
-    args = parse_args()
-
-    if args.daemonize:
-        logging.info("Running as daemon")
-        stdout, stderr = None, None
-        if not args.quiet:
-            stdout = sys.stdout
-            stderr = sys.stderr
-        with daemon.DaemonContext(stdout=stdout, stderr=stderr):
-            main(args.latitude, args.longitude, args.daemonize)
-    else:
-        main(args.latitude, args.longitude, True)
+    main()
