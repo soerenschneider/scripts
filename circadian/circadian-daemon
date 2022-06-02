@@ -149,6 +149,15 @@ def parse_args() -> argparse.Namespace:
 
 
 def validate_args(args: argparse.Namespace) -> None:
+    logging.info("Using latitude=%s", args.latitude)
+    logging.info("Using longitude=%s", args.longitude)
+    logging.info("Using sunset_offset=%d", args.sunset_offset)
+    logging.info("Using sunrise_offset=%d", args.sunrise_offset)
+    logging.info("Using daemonize=%r", args.daemonize)
+    logging.info("Using pidfile=%s", args.pidfile)
+    logging.info("Using quiet=%r", args.quiet)
+    if args.conf:
+        logging.info("Using conf=%s", args.conf)
     try:
         _validate_coordinate_long(args.longitude)
         _validate_coordinate_long(args.latitude)
