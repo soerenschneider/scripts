@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.6.0](https://www.github.com/soerenschneider/scripts/compare/v1.5.0...v1.6.0) (2022-06-02)
+
+
+### Features
+
+* add offset times, reading args from config file ([14980ce](https://www.github.com/soerenschneider/scripts/commit/14980ce0f7f6c59dc825f63b6d2dbed41a1c4542))
+* follow symlinks ([eec121b](https://www.github.com/soerenschneider/scripts/commit/eec121b2241f7a66481635cccfb10734e061353b))
+* print config values ([d7d62e5](https://www.github.com/soerenschneider/scripts/commit/d7d62e526293b84add42135ebcddb6c769066a12))
+
+
+### Bug Fixes
+
+* call correct script ([08046cd](https://www.github.com/soerenschneider/scripts/commit/08046cd828124c4e9ef5307afff0510176016cec))
+* use correct range for validation ([f33c73e](https://www.github.com/soerenschneider/scripts/commit/f33c73e699996519668ed3e87c6465f87ade8dbb))
+
 ## [1.5.0](https://www.github.com/soerenschneider/scripts/compare/v1.4.0...v1.5.0) (2022-03-24)
 
 
