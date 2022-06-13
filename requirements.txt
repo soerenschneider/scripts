@@ -7,7 +7,7 @@ pyfzf==0.3.1
 
 # github
 requests==2.27.1
-backoff==2.0.1
+backoff==2.1.2
 
 # taskwarrior
 jinja2==3.1.2
