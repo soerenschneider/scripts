@@ -1,6 +1,7 @@
 #!/bin/sh
 
-openssl pkcs12 -export -inkey /etc/vault-machine-*.soerenschneider.net.key -in /etc/vault-machine-*.soerenschneider.net.crt -out ~/shred.p12
-pk12util -d ~/.mozilla/firefox/w5w1qnsb.default-release -i ~/shred.p12
+sudo openssl pkcs12 -export -inkey /etc/vault-machine-*.soerenschneider.net.key -in /etc/vault-machine-*.soerenschneider.net.crt -out ~/shred.p12
+sudo chown soeren.soeren ~/shred.p12
+pk12util -d ~/.mozilla/firefox/*.default-release -i ~/shred.p12
 shred -u ~/shred.p12
 
