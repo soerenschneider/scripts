@@ -44,6 +44,18 @@ def get_tasks(tags: List[str] = None) -> Dict[str, Any]:
     return json.loads(data)
 
 
+def get_tasks_old(tags: List[str] = None) -> Dict[str, Any]:
+    if not tags:
+        tags = []
+
+    command = ['task', 'rc.json.depends.array=no', 'status:completed', 'or', 'status:pending'] + tags + ['export']
+    data = subprocess.check_output(command)
+    data = data.decode('utf-8')
+    data = data.replace('\n', '')
+
+    return json.loads(data)
+
+
 def check_due_date(tasks: List[Dict[str, Any]]) -> None:
     limit = datetime.timedelta(days=7) + datetime.datetime.utcnow()
     for task in tasks:
