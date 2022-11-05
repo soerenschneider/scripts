@@ -7,6 +7,13 @@
 
 * add vault mfa script ([b3d3842](https://www.github.com/soerenschneider/scripts/commit/b3d38424501cb5e4b26969280a45b1e135652bd2))
 
+## [1.7.0](https://www.github.com/soerenschneider/scripts/compare/v1.6.0...v1.7.0) (2022-11-05)
+
+
+### Features
+
+* add vault mfa script ([b3d3842](https://www.github.com/soerenschneider/scripts/commit/b3d38424501cb5e4b26969280a45b1e135652bd2))
+
 ## [1.6.0](https://www.github.com/soerenschneider/scripts/compare/v1.5.0...v1.6.0) (2022-06-02)
 
 
