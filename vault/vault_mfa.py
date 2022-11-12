@@ -157,6 +157,15 @@ class VaultClient:
 
         return resp_json["data"]["url"]
 
+    def autodetect_entity_id(self, name: str) -> Optional[str]:
+        """ Returns all defined TOTP methods. """
+        url = urllib.parse.urljoin(self._vault_address, f"/v1/identity/entity/name/{name}")
+        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._vault_token})
+        if not resp.ok:
+            raise VaultException(resp.status_code, url, resp.text)
+
+        return resp.json()["data"]["id"]
+
     def autodetect_method_id(self) -> Optional[str]:
         method_ids = self.list_totp_methods()
         if not method_ids:
@@ -202,8 +211,14 @@ def main() -> None:
             method_id = vault_client.autodetect_method_id()
             logging.info(f"Auto-detected TOTP method_id '{method_id}'")
 
-        if args.entity_id:
-            otp_url = vault_client.generate_totp_secret_admin(method_id=method_id, entity_id=args.entity_id, force=args.force)
+        if args.entity_id or args.entity_name:
+            if args.entity_name:
+                entity_id = vault_client.autodetect_entity_id(args.entity_name)
+                logging.info(f"Auto-detected entity_id '{entity_id}' for identity named '{args.entity_name}'")
+            else:
+                entity_id = args.entity_id
+
+            otp_url = vault_client.generate_totp_secret_admin(method_id=method_id, entity_id=entity_id, force=args.force)
         else:
             logging.info("No entity_id provided, using entity tied to VAULT_TOKEN")
             otp_url = vault_client.generate_totp_secret(method_id=method_id)
@@ -249,7 +264,11 @@ class ParsingUtils:
 
         parser = argparse.ArgumentParser(parents=[conf_parser])
         parser.add_argument("-q", "--quiet", action="store_true", default=False)
-        parser.add_argument("-e", "--entity-id")
+
+        entity_group = parser.add_mutually_exclusive_group(required=True)
+        entity_group.add_argument("-e", "--entity-id")
+        entity_group.add_argument("-n", "--entity-name")
+
         parser.add_argument("-m", "--method-id")
         parser.add_argument("-f", "--force", help="Delete and create new secret if existing", action="store_true",
                             default=False)
