@@ -17,9 +17,9 @@ from requests.adapters import HTTPAdapter
 
 # optional imports
 try:
-    import qrcode
+    import segno
 except ImportError:
-    qrcode = None
+    segno = None
 
 TOKEN_HEADER = "X-VAULT-TOKEN"
 BACKOFF_ATTEMPTS = 12
@@ -40,9 +40,8 @@ class AbstractTotpSecretOutput(ABC):
 
 class TotpQrOutput(AbstractTotpSecretOutput):
     def consume(self, totp_secret: str) -> None:
-        qr = qrcode.QRCode()
-        qr.add_data(totp_secret)
-        qr.print_ascii()
+        qrcode = segno.make(totp_secret)
+        qrcode.terminal()
 
 
 class TotpStdOutput(AbstractTotpSecretOutput):
@@ -175,8 +174,8 @@ def build_output(args: argparse.Namespace) -> AbstractTotpSecretOutput:
     if args.output_std:
         return TotpStdOutput()
     if args.output_qr:
-        if not qrcode:
-            raise ValueError("Could not import package 'qrcode'. Please install 'qrcode' or chose another output.")
+        if not segno:
+            raise ValueError("Could not import package 'segno'. Please install 'segno' or chose another output.")
 
         return TotpQrOutput()
     if args.output_file:
@@ -255,10 +254,10 @@ class ParsingUtils:
         parser.add_argument("-f", "--force", help="Delete and create new secret if existing", action="store_true",
                             default=False)
 
-        group = parser.add_mutually_exclusive_group(required=False)
-        group.add_argument('--output-qr', action="store_true", default=True)
-        group.add_argument('--output-std', action="store_true")
-        group.add_argument('--output-file', action="store", type=str, help="Write TOTP secret to file")
+        output_group = parser.add_mutually_exclusive_group(required=False)
+        output_group.add_argument('--output-qr', action="store_true", default=True)
+        output_group.add_argument('--output-std', action="store_true")
+        output_group.add_argument('--output-file', action="store", type=str, help="Write TOTP secret to file")
 
         parser.add_argument("-a", "--vault-address",
                             help="The address to reach vault. If not specified, uses VAULT_ADDR env var.")
