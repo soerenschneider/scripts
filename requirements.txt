@@ -1,13 +1,13 @@
 # circadian
 suntime==1.2.5
-python-daemon==2.3.1
+python-daemon==2.3.2
 
 # daily
 pyfzf==0.3.1
 
 # github
 requests==2.28.1
-backoff==2.1.2
+backoff==2.2.1
 
 # taskwarrior
 jinja2==3.1.2
