@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -e
+
+KEY="$HOME/.ssh/id_rsa"
+
+REPLY=$(vault write -format=json ssh_client_signer/sign/ssh_client_certs public_key="@${KEY}.pub")
+echo "${REPLY}" | jq -r '.data.signed_key' > "${KEY}-cert.pub"
+ssh-keygen -L -f "${KEY}-cert.pub"
