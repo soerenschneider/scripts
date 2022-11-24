@@ -369,7 +369,11 @@ def main() -> None:
         logging.disable(logging.WARNING)
 
     output = DisabledOutput()
-    if args.json_output:
+
+    if args.metric_file:
+        role_name = ParsingUtils.get_role_name(args)
+        output = PrometheusWrapperOutput(args.metric_file, role_name, output)
+    elif args.json_output:
         output = JsonStdOutput()
 
     try:
@@ -590,9 +594,6 @@ class CommandRotateSecretId(Command):
         logging.info("Fetching role_id for role_name %s", role_name)
         secret_id = ParsingUtils.get_secret_id(args)
         role_id = ParsingUtils.get_role_id(args)
-
-        if args.metric_file:
-            self.output = PrometheusWrapperOutput(args.metric_file, role_name, self.output)
 
         rotation_strategy = ValidityPeriodRotationStrategy(args.min_validity_period)
         if args.force_rotation:
