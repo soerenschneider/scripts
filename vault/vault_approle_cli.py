@@ -370,7 +370,7 @@ def main() -> None:
 
     output = DisabledOutput()
 
-    if args.metric_file:
+    if args.subparser_name == "rotate-secret-id" and args.metric_file:
         role_name = ParsingUtils.get_role_name(args)
         output = PrometheusWrapperOutput(args.metric_file, role_name, output)
     elif args.json_output:
