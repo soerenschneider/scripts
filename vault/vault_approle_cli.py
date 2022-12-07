@@ -876,7 +876,7 @@ class ParsingUtils:
         #############################################################################################
         # get-group
         #############################################################################################
-        get_group = command_subparsers.add_parser(CommandListGroups.cmd_id, help="Get a group by name")
+        get_group = command_subparsers.add_parser(CommandGetGroup.cmd_id, help="Get a group by name")
         get_group.add_argument("-n", "--group-name", required=True)
 
         #############################################################################################
