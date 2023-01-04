@@ -1,3 +1,7 @@
+# ansible
+pyyaml==6.0.0
+lineinfile==0.4.0
+
 # circadian
 suntime==1.2.5
 python-daemon==2.3.2
