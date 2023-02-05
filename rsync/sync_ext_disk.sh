@@ -4,7 +4,7 @@ set -e
 
 SRC=/mnt/src
 DEST=/mnt/dst
-DIRS=(documents-crypt scans-crypt photos-crypt media-crypt games-crypt)
+DIRS=(backup-crypt documents-crypt scans-crypt photos-crypt backups media-crypt share-crypt games-crypt)
 
 if mount | grep -s "${SRC}" > /dev/null; then
         for dir in "${DIRS[@]}"; do
@@ -14,7 +14,7 @@ if mount | grep -s "${SRC}" > /dev/null; then
         done
 fi
 
-echo "Success at $(date)" > "${DEST}/backups.log"
+echo "Success at $(date)" >> "${DEST}/backups.log"
 date +%s > "${SRC}/.last-successful-backup"
 
 sudo umount "${DEST}"
