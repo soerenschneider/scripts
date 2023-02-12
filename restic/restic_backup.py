@@ -51,22 +51,61 @@ class ResticError(Exception):
     pass
 
 
-def run_backup(repo: str, dirs: List[str]) -> Optional[str]:
-    """ Performs the backup operation. Returns the JSONified stdout of the restic backup call. """
-    if isinstance(dirs, str):
-        dirs = [dirs]
+class MariaDbBackup:
+    def __init__(self, user=None, password=None, container_name=None):
+        if not user:
+            self._user = os.getenv("MARIADB_USER")
+        else:
+            self._user = user
 
-    command = RESTIC_BACKUP_CMD + [repo] + dirs
-    logging.info("Starting backup using command: %s", command)
-    with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
-        stdout, stderr = proc.communicate()
-        proc.wait(BACKUP_TIMEOUT_SECONDS)
-        if proc.returncode != 0:
+        if not password:
+            self._password = os.getenv("MARIADB_PASSWORD")
+        else:
+            self._password = password
+
+        if container_name:
+            self._container_name = container_name
+
+    def run_backup(self) -> List[bytes]:
+        mysql_dump_cmd = ["mysqldump", "--all-databases", "-u", self._user, "-p", self._password]
+        if self._container_name:
+            mysql_dump_cmd = ["docker", "exec", self._container_name, "mysqldump", "--all-databases", "-u", self._user, "-p", self._password]
+
+        p1 = subprocess.Popen(mysql_dump_cmd, stdout=subprocess.PIPE)
+        backup_date = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+        restic_cmd = ["restic", "backup", "--stdin", "--stdin-filename", f"database_dump-{backup_date}.sql"]
+        p2 = subprocess.Popen(restic_cmd, stdin=p1.stdout)
+
+        stdout, stderr = p2.communicate()
+        p2.wait(BACKUP_TIMEOUT_SECONDS)
+        if p2.returncode != 0:
             logging.error("Backup was not successful: %s", stderr)
             raise ResticError(stderr)
-
         logging.info("Backup was successful!")
         return stdout.splitlines()[-1]
+
+
+class FilesystemBackup:
+    def __init__(self, repo: str, dirs: List[str]):
+        self._repo = repo
+        self._dirs = dirs
+
+    def run_backup(self) -> List[bytes]:
+        """ Performs the backup operation. Returns the JSONified stdout of the restic backup call. """
+        if isinstance(self._dirs, str):
+            dirs = [self._dirs]
+
+        command = RESTIC_BACKUP_CMD + [self._repo] + dirs
+        logging.info("Starting backup using command: %s", command)
+        with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
+            stdout, stderr = proc.communicate()
+            proc.wait(BACKUP_TIMEOUT_SECONDS)
+            if proc.returncode != 0:
+                logging.error("Backup was not successful: %s", stderr)
+                raise ResticError(stderr)
+
+            logging.info("Backup was successful!")
+            return stdout.splitlines()[-1]
 
 
 def write_metrics(metrics_data: io.StringIO, target_dir: Path, backup_id: str) -> None:
@@ -148,9 +187,14 @@ def main() -> None:
     args = parse_args()
     success = False
     json_output = {}
+    if os.getenv("_TYPE") == "mariadb":
+        logging.info("Using mariadb ")
+        impl = MariaDbBackup()
+    else:
+        impl = FilesystemBackup(args.repo, args.targets)
     try:
         validate_args(args)
-        stdout = run_backup(args.repo, args.targets)
+        stdout = impl.run_backup()
         json_output = json.loads(stdout)
         success = True
     except ValueError as err:
