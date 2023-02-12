@@ -63,18 +63,20 @@ class MariaDbBackup:
         else:
             self._password = password
 
-        if container_name:
+        if not container_name:
+            self._container_name = os.getenv("MARIADB_CONTAINER_NAME")
+        else:
             self._container_name = container_name
 
     def run_backup(self) -> List[bytes]:
-        mysql_dump_cmd = ["mysqldump", "--all-databases", "-u", self._user, "-p", self._password]
+        mysql_dump_cmd = ["mysqldump", "-u", self._user, f"-p{self._password}", "--all-databases" ]
         if self._container_name:
-            mysql_dump_cmd = ["docker", "exec", self._container_name, "mysqldump", "--all-databases", "-u", self._user, "-p", self._password]
+            mysql_dump_cmd = ["docker", "exec", self._container_name, "mysqldump", "-u", self._user, f"-p{self._password}", "--all-databases" ]
 
         p1 = subprocess.Popen(mysql_dump_cmd, stdout=subprocess.PIPE)
         backup_date = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
-        restic_cmd = ["restic", "backup", "--stdin", "--stdin-filename", f"database_dump-{backup_date}.sql"]
-        p2 = subprocess.Popen(restic_cmd, stdin=p1.stdout)
+        restic_cmd = ["restic", "--json", "backup", "--stdin", "--stdin-filename", f"database_dump-{backup_date}.sql"]
+        p2 = subprocess.Popen(restic_cmd, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         stdout, stderr = p2.communicate()
         p2.wait(BACKUP_TIMEOUT_SECONDS)
@@ -87,6 +89,15 @@ class MariaDbBackup:
 
 class FilesystemBackup:
     def __init__(self, repo: str, dirs: List[str]):
+        # check targets
+        if not dirs:
+            raise ValueError("No targets to backup defined")
+
+        dirs = [os.path.expanduser(repo) for repo in dirs.split(",")]
+        for target in dirs:
+            if not Path(target).exists():
+                raise ValueError(f"One of the targets does not exist: {target}")
+
         self._repo = repo
         self._dirs = dirs
 
@@ -152,15 +163,6 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("No repository defined")
     args.repo = os.path.expanduser(args.repo)
 
-    # check targets
-    if not args.targets:
-        raise ValueError("No targets to backup defined")
-
-    args.targets = [os.path.expanduser(repo) for repo in args.targets.split(",")]
-    for target in args.targets:
-        if not Path(target).exists():
-            raise ValueError(f"One of the targets does not exist: {target}")
-
     # check backup id
     if not args.backup_id:
         raise ValueError("No backup_id given")
@@ -195,9 +197,10 @@ def main() -> None:
     try:
         validate_args(args)
         stdout = impl.run_backup()
+        print(stdout)
         json_output = json.loads(stdout)
         success = True
-    except ValueError as err:
+    except NameError as err:
         logging.error("Can not start the backup: %s", err.args[0])
         sys.exit(1)
     except ResticError as err:
