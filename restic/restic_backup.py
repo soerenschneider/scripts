@@ -108,16 +108,16 @@ class DirectoryBackup(BackupImpl):
                 raise ValueError(f"One of the targets does not exist: {target}")
 
         self._repo = repo
-        self._dirs = dirs
+        if isinstance(dirs, str):
+            self._dirs = [dirs]
+        else:
+            self._dirs = dirs
 
     def run_backup(self) -> Optional[List[bytes]]:
         """ Performs the backup operation. Returns the JSONified stdout of the restic backup call. """
-        if isinstance(self._dirs, str):
-            dirs = [self._dirs]
-
         # skeleton of the backup cmd we're invoking
         restic_cmd = ["restic", "-q", "--json", "backup", "--one-file-system", "-r"]
-        command = restic_cmd + [self._repo] + dirs
+        command = restic_cmd + [self._repo] + self._dirs
         logging.info("Starting backup using command: %s", command)
         with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
             stdout, stderr = proc.communicate()
