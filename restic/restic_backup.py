@@ -10,18 +10,22 @@ import sys
 import shutil
 import subprocess
 
+from abc import ABC
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
+
+# env var keys
+ENV_RESTIC_TYPE = "_RESTIC_TYPE"
+ENV_MARIADB_CONTAINER_NAME = "MARIADB_CONTAINER_NAME"
+ENV_MARIADB_PASSWORD = "MARIADB_PASSWORD"
+ENV_MARIADB_USER = "MARIADB_USER"
 
 # time to wait for the backup process to finish until cancelling it
 BACKUP_TIMEOUT_SECONDS = 7200
 
 # prefix for all the metrics we're writing
 METRIC_PREFIX = "restic_backup"
-
-# skeleton of the backup cmd we're invoking
-RESTIC_BACKUP_CMD = ["restic", "-q", "--json", "backup", "--one-file-system", "-r"]
 
 # the json fields output of the restic 'backup' cmd as keys with a nice suffix and a help text as tuple values
 RESTIC_METRICS = {
@@ -51,24 +55,29 @@ class ResticError(Exception):
     pass
 
 
-class MariaDbBackup:
+class BackupImpl(ABC):
+    def run_backup(self) -> Optional[List[bytes]]:
+        pass
+
+
+class MariaDbBackup(BackupImpl):
     def __init__(self, user=None, password=None, container_name=None):
         if not user:
-            self._user = os.getenv("MARIADB_USER")
+            self._user = os.getenv(ENV_MARIADB_USER)
         else:
             self._user = user
 
         if not password:
-            self._password = os.getenv("MARIADB_PASSWORD")
+            self._password = os.getenv(ENV_MARIADB_PASSWORD)
         else:
             self._password = password
 
         if not container_name:
-            self._container_name = os.getenv("MARIADB_CONTAINER_NAME")
+            self._container_name = os.getenv(ENV_MARIADB_CONTAINER_NAME)
         else:
             self._container_name = container_name
 
-    def run_backup(self) -> List[bytes]:
+    def run_backup(self) -> Optional[List[bytes]]:
         mysql_dump_cmd = ["mysqldump", "-u", self._user, f"-p{self._password}", "--all-databases" ]
         if self._container_name:
             mysql_dump_cmd = ["docker", "exec", self._container_name, "mysqldump", "-u", self._user, f"-p{self._password}", "--all-databases" ]
@@ -87,7 +96,7 @@ class MariaDbBackup:
         return stdout.splitlines()[-1]
 
 
-class FilesystemBackup:
+class DirectoryBackup(BackupImpl):
     def __init__(self, repo: str, dirs: List[str]):
         # check targets
         if not dirs:
@@ -101,12 +110,14 @@ class FilesystemBackup:
         self._repo = repo
         self._dirs = dirs
 
-    def run_backup(self) -> List[bytes]:
+    def run_backup(self) -> Optional[List[bytes]]:
         """ Performs the backup operation. Returns the JSONified stdout of the restic backup call. """
         if isinstance(self._dirs, str):
             dirs = [self._dirs]
 
-        command = RESTIC_BACKUP_CMD + [self._repo] + dirs
+        # skeleton of the backup cmd we're invoking
+        restic_cmd = ["restic", "-q", "--json", "backup", "--one-file-system", "-r"]
+        command = restic_cmd + [self._repo] + dirs
         logging.info("Starting backup using command: %s", command)
         with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
             stdout, stderr = proc.communicate()
@@ -139,7 +150,7 @@ def format_data(output: dict, identifier: str) -> io.StringIO:
     for metric in RESTIC_METRICS:
         if metric not in output:
             logging.error("Excepted metric to be around but wasn't: %s", metric)
-            output["exporter_errors"] =+ 1
+            output["exporter_errors"] += 1
         else:
             value = output[metric]
             buffer.write(f"# HELP {METRIC_PREFIX}_{metric}{RESTIC_METRICS[metric][0]} {RESTIC_METRICS[metric][1]}\n")
@@ -177,10 +188,23 @@ def parse_args() -> argparse.Namespace:
     """ Parses the arguments and returns the parsed namespace. """
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--repo", default=os.environ.get("RESTIC_REPOSITORY"), help="The restic repository")
-    parser.add_argument("-t", "--targets", default=os.environ.get("RESTIC_TARGETS"), help="The targets to include in the snapshot")
+    parser.add_argument("--targets", default=os.environ.get("RESTIC_TARGETS"), help="The targets to include in the snapshot")
+    parser.add_argument("-t", "--type", default=os.environ.get(ENV_RESTIC_TYPE), help="The type defines what exactly to backup")
     parser.add_argument("-i", "--id", dest="backup_id", default=os.environ.get("RESTIC_BACKUP_ID"), help="An identifier for this backup")
     parser.add_argument("-m", "--metric-dir", default="/var/lib/node_exporter", help="Dir to write metrics to")
     return parser.parse_args()
+
+
+def get_backup_impl(args: argparse.Namespace) -> BackupImpl:
+    if args.type.lower() == "mariadb":
+        logging.info("Using 'mariadb' backup impl")
+        return MariaDbBackup()
+
+    if args.type.lower() == "directory":
+        logging.info("Using 'directory' backup impl")
+        return DirectoryBackup(args.repo, args.targets)
+
+    raise ValueError(f"Unknown backup type '{args.type}'")
 
 
 def main() -> None:
@@ -189,15 +213,10 @@ def main() -> None:
     args = parse_args()
     success = False
     json_output = {}
-    if os.getenv("_TYPE") == "mariadb":
-        logging.info("Using mariadb ")
-        impl = MariaDbBackup()
-    else:
-        impl = FilesystemBackup(args.repo, args.targets)
+    impl = get_backup_impl(args)
     try:
         validate_args(args)
         stdout = impl.run_backup()
-        print(stdout)
         json_output = json.loads(stdout)
         success = True
     except NameError as err:
