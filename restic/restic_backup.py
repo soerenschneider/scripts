@@ -20,6 +20,9 @@ ENV_RESTIC_TYPE = "_RESTIC_TYPE"
 ENV_MARIADB_CONTAINER_NAME = "MARIADB_CONTAINER_NAME"
 ENV_MARIADB_PASSWORD = "MARIADB_PASSWORD"
 ENV_MARIADB_USER = "MARIADB_USER"
+ENV_POSTGRES_CONTAINER_NAME = "POSTGRES_CONTAINER_NAME"
+ENV_POSTGRES_PASSWORD = "POSTGRES_PASSWORD"
+ENV_POSTGRES_USER = "POSTGRES_USER"
 
 # time to wait for the backup process to finish until cancelling it
 BACKUP_TIMEOUT_SECONDS = 7200
@@ -58,6 +61,47 @@ class ResticError(Exception):
 class BackupImpl(ABC):
     def run_backup(self) -> Optional[List[bytes]]:
         pass
+
+
+class PostgresDbBackup(BackupImpl):
+    def __init__(self, user=None, password=None, container_name=None):
+        if not user:
+            self._user = os.getenv(ENV_POSTGRES_USER)
+        else:
+            self._user = user
+
+        if not password:
+            self._password = os.getenv(ENV_POSTGRES_PASSWORD)
+        else:
+            self._password = password
+
+        if not container_name:
+            self._container_name = os.getenv(ENV_POSTGRES_CONTAINER_NAME)
+        else:
+            self._container_name = container_name
+
+    def run_backup(self) -> Optional[List[bytes]]:
+        pg_dump_cmd = ["pg_dumpall", "--clean", f"-U{self._user}"]
+        if self._container_name:
+            pg_dump_cmd = ["docker", "exec", self._container_name] + pg_dump_cmd
+
+        p1 = subprocess.Popen(pg_dump_cmd, stdout=subprocess.PIPE)
+
+        gzip_cmd = ["gzip", "--rsyncable"]
+        p2 = subprocess.Popen(gzip_cmd, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        backup_date = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+        restic_cmd = ["restic", "--json", "backup", "--stdin", "--stdin-filename", f"database_dump-{backup_date}.sql"]
+        p3 = subprocess.Popen(restic_cmd, stdin=p2.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        stdout, stderr = p3.communicate()
+        p3.wait(BACKUP_TIMEOUT_SECONDS)
+        if p3.returncode != 0:
+            logging.error("Backup was not successful: %s", stderr)
+            raise ResticError(stderr)
+
+        logging.info("Backup was successful!")
+        return stdout.splitlines()[-1]
 
 
 class MariaDbBackup(BackupImpl):
@@ -199,6 +243,10 @@ def get_backup_impl(args: argparse.Namespace) -> BackupImpl:
     if args.type.lower() == "mariadb":
         logging.info("Using 'mariadb' backup impl")
         return MariaDbBackup()
+
+    if args.type.lower() == "postgres":
+        logging.info("Using 'postgres' backup impl")
+        return PostgresDbBackup()
 
     if args.type.lower() == "directory":
         logging.info("Using 'directory' backup impl")
