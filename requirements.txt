@@ -4,7 +4,7 @@ lineinfile==0.4.0
 
 # circadian
 suntime==1.2.5
-python-daemon==2.3.2
+python-daemon==3.0.1
 
 # daily
 pyfzf==0.3.1
