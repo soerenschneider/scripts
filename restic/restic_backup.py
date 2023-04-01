@@ -123,11 +123,8 @@ class DirectoryBackup(BackupImpl):
         else:
             self._dirs = dirs
 
-        if exclude_file:
-            self._exclude_file = exclude_file
-
-        if exclude_items:
-            self._exclude_items = [os.path.expanduser(repo) for repo in exclude_items.split(ARG_SPLIT_TOKEN)]
+        self._exclude_file = exclude_file
+        self._exclude_items = [os.path.expanduser(item) for item in exclude_items.split(ARG_SPLIT_TOKEN)]
 
     def run_backup(self) -> Optional[List[bytes]]:
         """ Performs the backup operation. Returns the JSONified stdout of the restic backup call. """
