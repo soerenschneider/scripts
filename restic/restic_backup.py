@@ -9,6 +9,7 @@ import re
 import sys
 import shutil
 import subprocess
+import typing
 
 from abc import ABC
 from datetime import datetime
@@ -16,10 +17,17 @@ from pathlib import Path
 from typing import List, Optional
 
 # env var keys
+ENV_RESTIC_TARGETS = "RESTIC_TARGETS"
+ENV_RESTIC_EXCLUDE_FILE = "RESTIC_EXCLUDE_FILE"
+ENV_RESTIC_REPOSITORY = "RESTIC_REPOSITORY"
+ENV_RESTIC_BACKUP_ID = "RESTIC_BACKUP_ID"
+ENV_RESTIC_EXCLUDE = "RESTIC_EXCLUDE"
 ENV_RESTIC_TYPE = "_RESTIC_TYPE"
 ENV_MARIADB_CONTAINER_NAME = "MARIADB_CONTAINER_NAME"
 ENV_MARIADB_PASSWORD = "MARIADB_PASSWORD"
 ENV_MARIADB_USER = "MARIADB_USER"
+
+ARG_SPLIT_TOKEN=","
 
 # time to wait for the backup process to finish until cancelling it
 BACKUP_TIMEOUT_SECONDS = 7200
@@ -97,12 +105,14 @@ class MariaDbBackup(BackupImpl):
 
 
 class DirectoryBackup(BackupImpl):
-    def __init__(self, repo: str, dirs: List[str]):
-        # check targets
+    def __init__(self, repo: str, dirs: str, exclude_file: str = None, exclude_items: str = None):
+        if not repo:
+            raise ValueError("no repo provided")
+
         if not dirs:
             raise ValueError("No targets to backup defined")
 
-        dirs = [os.path.expanduser(repo) for repo in dirs.split(",")]
+        dirs = [os.path.expanduser(repo) for repo in dirs.split(ARG_SPLIT_TOKEN)]
         for target in dirs:
             if not Path(target).exists():
                 raise ValueError(f"One of the targets does not exist: {target}")
@@ -113,11 +123,24 @@ class DirectoryBackup(BackupImpl):
         else:
             self._dirs = dirs
 
+        if exclude_file:
+            self._exclude_file = exclude_file
+
+        if exclude_items:
+            self._exclude_items = [os.path.expanduser(repo) for repo in exclude_items.split(ARG_SPLIT_TOKEN)]
+
     def run_backup(self) -> Optional[List[bytes]]:
         """ Performs the backup operation. Returns the JSONified stdout of the restic backup call. """
         # skeleton of the backup cmd we're invoking
-        restic_cmd = ["restic", "-q", "--json", "backup", "--one-file-system", "-r"]
-        command = restic_cmd + [self._repo] + self._dirs
+        restic_base_cmd = ["restic", "-q", "--json", "backup", "--one-file-system"]
+        if self._exclude_file:
+            restic_base_cmd += [f"--exclude-file={self._exclude_file}"]
+
+        if self._exclude_items:
+            for item in self._exclude_items:
+                restic_base_cmd += [f"--exclude={item}"]
+
+        command = restic_base_cmd + ["-r", self._repo] + self._dirs
         logging.info("Starting backup using command: %s", command)
         with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
             stdout, stderr = proc.communicate()
@@ -187,22 +210,28 @@ def validate_args(args: argparse.Namespace) -> None:
 def parse_args() -> argparse.Namespace:
     """ Parses the arguments and returns the parsed namespace. """
     parser = argparse.ArgumentParser()
-    parser.add_argument("-r", "--repo", default=os.environ.get("RESTIC_REPOSITORY"), help="The restic repository")
-    parser.add_argument("--targets", default=os.environ.get("RESTIC_TARGETS"), help="The targets to include in the snapshot")
+    parser.add_argument("-r", "--repo", default=os.environ.get(ENV_RESTIC_REPOSITORY), help="The restic repository")
+    parser.add_argument("--targets", default=os.environ.get(ENV_RESTIC_TARGETS), help=f"The targets to include in the snapshot. Provide as a single string, separated by '{ARG_SPLIT_TOKEN}'")
     parser.add_argument("-t", "--type", default=os.environ.get(ENV_RESTIC_TYPE), help="The type defines what exactly to backup")
-    parser.add_argument("-i", "--id", dest="backup_id", default=os.environ.get("RESTIC_BACKUP_ID"), help="An identifier for this backup")
+    parser.add_argument("-i", "--id", dest="backup_id", default=os.environ.get(ENV_RESTIC_BACKUP_ID), help="An identifier for this backup")
     parser.add_argument("-m", "--metric-dir", default="/var/lib/node_exporter", help="Dir to write metrics to")
+    parser.add_argument("-e", "--exclude", default=os.environ.get(ENV_RESTIC_EXCLUDE), help=f"Item(s) to exclude from backup. Separate with '{ARG_SPLIT_TOKEN}'")
+    parser.add_argument("-ef", "--exclude-file", default=os.environ.get(ENV_RESTIC_EXCLUDE_FILE), help="Path to file containing exclude patterns")
     return parser.parse_args()
 
 
 def get_backup_impl(args: argparse.Namespace) -> BackupImpl:
-    if args.type.lower() == "mariadb":
-        logging.info("Using 'mariadb' backup impl")
-        return MariaDbBackup()
+    if not args.type:
+        logging.warning("no backup type specified, falling back to 'directory'")
+        args.type = "directory"
 
     if args.type.lower() == "directory":
         logging.info("Using 'directory' backup impl")
         return DirectoryBackup(args.repo, args.targets)
+
+    if args.type.lower() == "mariadb":
+        logging.info("Using 'mariadb' backup impl")
+        return MariaDbBackup()
 
     raise ValueError(f"Unknown backup type '{args.type}'")
 
