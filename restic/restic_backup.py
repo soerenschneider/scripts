@@ -21,7 +21,7 @@ ENV_RESTIC_TARGETS = "RESTIC_TARGETS"
 ENV_RESTIC_EXCLUDE_FILE = "RESTIC_EXCLUDE_FILE"
 ENV_RESTIC_REPOSITORY = "RESTIC_REPOSITORY"
 ENV_RESTIC_BACKUP_ID = "RESTIC_BACKUP_ID"
-ENV_RESTIC_EXCLUDE = "RESTIC_EXCLUDE"
+ENV_RESTIC_EXCLUDE_ITEMS = "RESTIC_EXCLUDE_ITEMS"
 ENV_RESTIC_TYPE = "_RESTIC_TYPE"
 ENV_MARIADB_CONTAINER_NAME = "MARIADB_CONTAINER_NAME"
 ENV_MARIADB_PASSWORD = "MARIADB_PASSWORD"
@@ -215,7 +215,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-t", "--type", default=os.environ.get(ENV_RESTIC_TYPE), help="The type defines what exactly to backup")
     parser.add_argument("-i", "--id", dest="backup_id", default=os.environ.get(ENV_RESTIC_BACKUP_ID), help="An identifier for this backup")
     parser.add_argument("-m", "--metric-dir", default="/var/lib/node_exporter", help="Dir to write metrics to")
-    parser.add_argument("-e", "--exclude", default=os.environ.get(ENV_RESTIC_EXCLUDE), help=f"Item(s) to exclude from backup. Separate with '{ARG_SPLIT_TOKEN}'")
+    parser.add_argument("-e", "--exclude-items", default=os.environ.get(ENV_RESTIC_EXCLUDE_ITEMS), help=f"Item(s) to exclude from backup. Separate with '{ARG_SPLIT_TOKEN}'")
     parser.add_argument("-ef", "--exclude-file", default=os.environ.get(ENV_RESTIC_EXCLUDE_FILE), help="Path to file containing exclude patterns")
     return parser.parse_args()
 
@@ -227,7 +227,7 @@ def get_backup_impl(args: argparse.Namespace) -> BackupImpl:
 
     if args.type.lower() == "directory":
         logging.info("Using 'directory' backup impl")
-        return DirectoryBackup(args.repo, args.targets)
+        return DirectoryBackup(repo=args.repo, dirs=args.targets, exclude_file=args.exclude_file, exclude_items=args.exclude_items)
 
     if args.type.lower() == "mariadb":
         logging.info("Using 'mariadb' backup impl")
