@@ -102,10 +102,7 @@ class VaultClient:
             if not self._vault_address:
                 raise ValueError("No 'VAULT_ADDR' defined")
 
-        if token:
-            self._vault_token = token
-        else:
-            self._load_vault_token()
+        self._vault_token = token
 
         if not approle_mount_path:
             self._approle_mount_path = DEFAULT_APPROLE_MOUNT_PATH
@@ -145,7 +142,7 @@ class VaultClient:
     def aws_generate_credentials(self, role: str) -> AwsCredentials:
         path = f"v1/{self._aws_mount_path}/creds/{role}"
         url = urllib.parse.urljoin(self._vault_address, path)
-        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._vault_token})
+        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
         if not resp.ok:
             raise VaultException(resp.status_code, url, resp.text)
 
@@ -157,7 +154,7 @@ class VaultClient:
     def aws_read_role(self, role: str) -> Dict[str, str]:
         path = f"v1/{self._aws_mount_path}/roles/{role}"
         url = urllib.parse.urljoin(self._vault_address, path)
-        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._vault_token})
+        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
         if not resp.ok:
             raise VaultException(resp.status_code, url, resp.text)
 
@@ -166,7 +163,7 @@ class VaultClient:
     def aws_list_roles(self) -> List[str]:
         path = f"v1/{self._aws_mount_path}/roles?list=true"
         url = urllib.parse.urljoin(self._vault_address, path)
-        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._vault_token})
+        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
         if not resp.ok:
             raise VaultException(resp.status_code, url, resp.text)
 
@@ -175,7 +172,7 @@ class VaultClient:
     def totp_list_methods(self) -> List[str]:
         """ Returns all defined TOTP methods. """
         url = urllib.parse.urljoin(self._vault_address, "/v1/identity/mfa/method/totp?list=true")
-        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._vault_token})
+        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
         if not resp.ok:
             raise VaultException(resp.status_code, url, resp.text)
 
@@ -189,7 +186,7 @@ class VaultClient:
             "method_id": method_id,
             "entity_id": entity_id
         }
-        resp = self._http_pool.post(url=url, data=data, headers={TOKEN_HEADER: self._vault_token})
+        resp = self._http_pool.post(url=url, data=data, headers={TOKEN_HEADER: self._get_vault_token()})
         if not resp.ok:
             raise VaultException(resp.status_code, url, resp.text)
 
@@ -200,7 +197,7 @@ class VaultClient:
             "method_id": method_id,
             "entity_id": entity_id
         }
-        resp = self._http_pool.post(url=url, data=data, headers={TOKEN_HEADER: self._vault_token})
+        resp = self._http_pool.post(url=url, data=data, headers={TOKEN_HEADER: self._get_vault_token()})
         if not resp.ok:
             raise VaultException(resp.status_code, url, resp.text)
 
@@ -223,7 +220,7 @@ class VaultClient:
         data = {
             "method_id": method_id
         }
-        resp = self._http_pool.post(url=url, data=data, headers={TOKEN_HEADER: self._vault_token})
+        resp = self._http_pool.post(url=url, data=data, headers={TOKEN_HEADER: self._get_vault_token()})
         if not resp.ok:
             raise VaultException(resp.status_code, url, resp.text)
 
@@ -251,7 +248,7 @@ class VaultClient:
     def identity_entity_autodetect_id(self, name: str) -> Optional[str]:
         """ Returns all defined TOTP methods. """
         url = urllib.parse.urljoin(self._vault_address, f"/v1/identity/entity/name/{name}")
-        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._vault_token})
+        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
         if not resp.ok:
             raise VaultException(resp.status_code, url, resp.text)
 
