@@ -448,10 +448,6 @@ class VaultClient:
             logging.error("creation_time and expiration_time could not be parsed")
             return None, None
 
-        if creation_time and "secret_id_ttl" in data:
-            expiration_time = creation_time + timedelta(seconds=data["secret_id_ttl"])
-            return creation_time, expiration_time
-
         try:
             expiration_time = Utils.parse_timestamp(data["expiration_time"])
         except (ValueError, KeyError, TypeError):
