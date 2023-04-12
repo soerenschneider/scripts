@@ -139,15 +139,18 @@ class VaultClient:
             self._load_vault_token()
         return self._vault_token
 
-    def aws_generate_credentials(self, role: str) -> AwsCredentials:
-        path = f"v1/{self._aws_mount_path}/creds/{role}"
+    def aws_generate_credentials(self, role: str, ttl: str = None) -> AwsCredentials:
+        if not ttl:
+            ttl = "3600s"
+        path = f"v1/{self._aws_mount_path}/creds/{role}?ttl={ttl}"
         url = urllib.parse.urljoin(self._vault_address, path)
         resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
         if not resp.ok:
             raise VaultException(resp.status_code, url, resp.text)
 
         json_data = resp.json()
-        logging.info("Received credentials, valid for {} (req-id: {})", json_data["request_id"], json_data["lease_duration"])
+
+        logging.info("Received credentials, valid for %s (req-id: %s)", json_data["lease_duration"], json_data["request_id"])
         return AwsCredentials(access_key_id=json_data["data"]["access_key"],
                               secret_access_key=json_data["data"]["secret_key"])
 
