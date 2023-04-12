@@ -36,11 +36,11 @@ def parse_args() -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="cmd")
     generate_credentials_parser = subparsers.add_parser(CMD_GEN)
     generate_credentials_parser.add_argument("-p", "--profile", default=DEFAULT_PROFILE, help="name of the profile")
-    generate_credentials_parser.add_argument("-r", "--role-name", help="Specifies a name of a role to generate credentials for")
-    generate_credentials_parser.add_argument("-t", "--ttl", help="Specify how long the credentials should be valid for")
+    generate_credentials_parser.add_argument("-r", "--role-name", required=True, help="Specifies a name of a role to generate credentials for")
+    generate_credentials_parser.add_argument("-t", "--ttl", default=3600, help="Specify how long the credentials should be valid for")
 
     read_role_parser = subparsers.add_parser('read')
-    read_role_parser.add_argument("-r", "--role-name", help="Specifies a name of a role to read configuration from")
+    read_role_parser.add_argument("-r", "--role-name", required=True, help="Specifies a name of a role to read configuration from")
     read_role_parser.add_argument("-j", "--json-output", action="store_true", help="Prints json formatted output")
 
     subparsers.add_parser('list')
