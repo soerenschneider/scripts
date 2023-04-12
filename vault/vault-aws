@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+
+import argparse
+import configparser
+import json
+import os
+import sys
+
+from vault import VaultClient, VaultException, AwsCredentials
+
+
+CMD_GEN = "gen"
+
+DEFAULT_AWS_MOUNT_PATH = "aws"
+DEFAULT_PROFILE = "default"
+CREDENTIALS_FILENAME = os.path.expanduser("~/.aws/credentials")
+
+
+def parse_args() -> argparse.Namespace:
+    conf_parser = argparse.ArgumentParser(
+        description=__doc__,  # printed with -h/--help
+        # Don't mess with format of description
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        # Turn off help, so we print all options in response to -h
+        add_help=False,
+    )
+
+    parser = argparse.ArgumentParser(parents=[conf_parser])
+
+    parser.add_argument("-m", "--mount-path", default=DEFAULT_AWS_MOUNT_PATH)
+    parser.add_argument("-a", "--vault-address",
+                        help="The address to reach vault. If not specified, uses VAULT_ADDR env var.")
+    parser.add_argument("-t", "--vault-token",
+                        help="The token to use. If not specified, uses VAULT_TOKEN env var or ~/.vault-token file.")
+
+    subparsers = parser.add_subparsers(dest="cmd")
+    generate_credentials_parser = subparsers.add_parser(CMD_GEN)
+    generate_credentials_parser.add_argument("-p", "--profile", default=DEFAULT_PROFILE, help="name of the profile")
+    generate_credentials_parser.add_argument("-r", "--role-name", help="Specifies a name of a role to generate credentials for")
+    generate_credentials_parser.add_argument("-t", "--ttl", help="Specify how long the credentials should be valid for")
+
+    read_role_parser = subparsers.add_parser('read')
+    read_role_parser.add_argument("-r", "--role-name", help="Specifies a name of a role to read configuration from")
+    read_role_parser.add_argument("-j", "--json-output", action="store_true", help="Prints json formatted output")
+
+    subparsers.add_parser('list')
+
+    return parser.parse_args()
+
+
+def update_credentials_file(profile: str, creds: AwsCredentials) -> None:
+    config = configparser.ConfigParser()
+    config.read(CREDENTIALS_FILENAME)
+
+    config[profile] = creds.to_dict()
+
+    with open(CREDENTIALS_FILENAME, 'w', encoding="utf-8") as configfile:
+        config.write(configfile)
+
+def run(client: VaultClient, args: argparse.Namespace) -> None:
+    match args.cmd:
+        case "list":
+            roles = client.aws_list_roles()
+            print(roles)
+        case "gen":
+            # todo: ttl
+            creds = client.aws_generate_credentials(args.role_name)
+            update_credentials_file(args.profile, creds)
+        case "read":
+            details = client.aws_read_role(args.role_name)
+            if args.json_output:
+                print(json.dumps(details))
+            else:
+                print(details)
+        case _:
+            print("No cmd given")
+            sys.exit(1)
+
+def main() -> None:
+    args = parse_args()
+    client = VaultClient(addr=args.vault_address, token=args.vault_token, aws_mount_path=args.mount_path)
+    run(client, args)
+
+
+if __name__ == "__main__":
+    main()

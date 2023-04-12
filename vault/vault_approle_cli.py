@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-import functools
 import io
 import json
 import logging
@@ -11,338 +10,25 @@ import shutil
 import socket
 import stat
 import time
-import urllib.parse
 import uuid
 
-from abc import ABC, abstractmethod
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
-from typing import List, Optional, Dict, Tuple, Any
+from vault import VaultClient, VaultException, ValidityPeriodApproleRotationStrategy, StaticApproleRotationStrategy
 
-import requests
-from urllib3.util.retry import Retry
-from requests.adapters import HTTPAdapter
+from abc import ABC, abstractmethod
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import List, Optional, Dict, Any
 
 DEFAULT_MIN_VALIDITY_PERIOD_PERCENT = 34
-TOKEN_HEADER = "X-VAULT-TOKEN"
-BACKOFF_ATTEMPTS = 12
-
-
-class SecretIdRotationStrategy(ABC):
-    @abstractmethod
-    def rotate(self, creation_time: datetime, expiration_time: datetime) -> bool:
-        pass
+ROLE_ID_DEFAULT_JSON_PATH = ".role_id"
+ROLE_NAME_DEFAULT_JSON_PATH = ".role_name"
+SECRET_ID_DEFAULT_JSON_PATH = ".secret_id"
 
 
 class JsonOutput(ABC):
     @abstractmethod
     def communicate(self, success: bool, pairs: Dict) -> None:
         pass
-
-
-class VaultException(Exception):
-    def __init__(self, status_code: int, url: str = None, text: str = None):
-        self.status_code = status_code
-        self.url = url
-        self.text = text
-
-
-class VaultClient:
-    def __init__(self, addr: str = None,
-                 token: str = None,
-                 approle_mount_path: str = "approle",
-                 backoff_attempts: int = BACKOFF_ATTEMPTS):
-        if addr:
-            self._vault_address = addr
-        else:
-            self._vault_address = os.getenv("VAULT_ADDR")
-            if not self._vault_address:
-                raise ValueError("No 'VAULT_ADDR' defined")
-
-        self._vault_token = token
-
-        # define mount path for the AppRole auth
-        if not approle_mount_path:
-            raise ValueError(f"Illegal mount path: {approle_mount_path}")
-        self._approle_mount_path = approle_mount_path
-
-        self._http_pool = requests.Session()
-        # set timeout globally
-        self._http_pool.request = functools.partial(self._http_pool.request, timeout=10)
-        if backoff_attempts:
-            retries = Retry(total=backoff_attempts, backoff_factor=1, status_forcelist=[412, 500, 502, 503, 504])
-            self._http_pool.mount("http://", HTTPAdapter(max_retries=retries))
-            self._http_pool.mount("https://", HTTPAdapter(max_retries=retries))
-
-    def _load_vault_token(self):
-        self._vault_token = os.getenv("VAULT_TOKEN")
-
-        vault_token_file = Path.home() / ".vault-token"
-        if not self._vault_token:
-            logging.info("Could not find 'VAULT_TOKEN', trying to read token from '%s'", vault_token_file)
-            if vault_token_file.is_file():
-                self._vault_token = vault_token_file.read_text(encoding="utf-8").rstrip("\n")
-
-        if not self._vault_token:
-            raise ValueError(f"Neither 'VAULT_TOKEN' defined nor '{vault_token_file}' existent")
-
-    def _get_vault_token(self) -> str:
-        # lazy-load vault token as it's not required for all operations
-        if not self._vault_token:
-            self._load_vault_token()
-        return self._vault_token
-
-    def get_secret_id_accessors(self, role_name: str) -> List[str]:
-        url = urllib.parse.urljoin(
-            self._vault_address,
-            f"v1/auth/{self._approle_mount_path}/role/{role_name}/secret-id?list=true",
-        )
-        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
-        if resp.ok:
-            return resp.json()["data"]["keys"]
-        if resp.status_code == 404:
-            return []
-        raise VaultException(resp.status_code, url, resp.text)
-
-    def destroy_secret_id_accessors(self, role_name: str, secret_id_accessors: List[str] = None) -> Tuple[int, int]:
-        destroyed, error = 0, 0
-        if not secret_id_accessors:
-            secret_id_accessors = self.get_secret_id_accessors(role_name)
-
-        for sia in secret_id_accessors:
-            if self.destroy_secret_id_accessor(role_name, sia):
-                destroyed += 1
-            else:
-                error += 1
-        return destroyed, error
-
-    def destroy_secret_id_accessor(self, role_name: str, secret_id_accessor: str) -> bool:
-        return self.destroy_secret_id(role_name, secret_id_accessor, True)
-
-    def destroy_secret_id(self, role_name: str, secret_id: str, is_accessor: bool = False) -> bool:
-        data = {}
-        if is_accessor:
-            name = "secret-id-accessor"
-            data["secret_id_accessor"] = secret_id
-        else:
-            name = "secret-id"
-            data["secret_id"] = secret_id
-
-        url = urllib.parse.urljoin(
-            self._vault_address,
-            f"v1/auth/{self._approle_mount_path}/role/{role_name}/{name}/destroy",
-        )
-        resp = self._http_pool.post(
-            url=url, data=data, headers={TOKEN_HEADER: self._get_vault_token()}
-        )
-        if resp.ok:
-            return True
-        raise VaultException(resp.status_code, url, resp.text)
-
-    def delete_role(self, role_name: str) -> bool:
-        url = urllib.parse.urljoin(
-            self._vault_address, f"v1/auth/{self._approle_mount_path}/role/{role_name}"
-        )
-        resp = self._http_pool.delete(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
-        if resp.ok:
-            return True
-        raise VaultException(resp.status_code, url, resp.text)
-
-    def list_role_names(self) -> List[str]:
-        url = urllib.parse.urljoin(
-            self._vault_address, f"v1/auth/{self._approle_mount_path}/role?list=true"
-        )
-        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
-        if resp.ok:
-            return resp.json()["data"]["keys"]
-        # vault actually misuses this status code instead of returning an empty list with a correct status code
-        if resp.status_code == 404:
-            return []
-        raise VaultException(resp.status_code, url, resp.text)
-
-    def get_role(self, role_name: str) -> Optional[str]:
-        url = urllib.parse.urljoin(
-            self._vault_address, f"v1/auth/{self._approle_mount_path}/role/{role_name}"
-        )
-        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
-        if resp.ok:
-            return resp.json()["data"]
-        raise VaultException(resp.status_code, url, resp.text)
-
-    def get_role_id(self, role_name: str) -> Optional[str]:
-        url = urllib.parse.urljoin(
-            self._vault_address, f"v1/auth/{self._approle_mount_path}/role/{role_name}/role-id"
-        )
-        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
-        if resp.ok:
-            return resp.json()["data"]["role_id"]
-        raise VaultException(resp.status_code, url, resp.text)
-
-    def set_secret_id(self, role_name: str, secret_id: str = None, wrap_ttl: int = None, cidrs: List[str] = None, metadata: Dict[str, Any] = None) -> Dict:
-        if not isinstance(metadata, Dict) or not metadata:
-            metadata = {}
-
-        if not isinstance(cidrs, List) or cidrs is None:
-            cidrs = []
-
-        endpoint = "secret-id"
-        data = {
-            "cidr_list": cidrs,
-            "token_bound_cidrs": cidrs,
-        }
-
-        # only attach metadata if defined
-        if metadata:
-            data["metadata"] = json.dumps(metadata)
-
-        # if the secret_id is created on client side, include it in the request and adjust the endpoint accordingly
-        if secret_id:
-            data["secret_id"] = secret_id
-            endpoint = f"custom-{endpoint}"
-
-        url = urllib.parse.urljoin(self._vault_address, f"v1/auth/{self._approle_mount_path}/role/{role_name}/{endpoint}")
-        headers = {TOKEN_HEADER: self._get_vault_token()}
-        if wrap_ttl:
-            headers["X-Vault-Wrap-TTL"] = f"{wrap_ttl}s"
-
-        resp = self._http_pool.post(url=url, headers=headers, data=data)
-        if not resp.ok:
-            raise VaultException(resp.status_code, url, resp.text)
-
-        if wrap_ttl:
-            return resp.json()["wrap_info"]
-        return resp.json()["data"]
-
-    def lookup_secret_id_accessor(self, role_name: str, secret_id_accessor: str) -> Dict[str, Any]:
-        return self.lookup_secret_id(role_name, secret_id_accessor, True)
-
-    def lookup_secret_id(self, role_name: str, secret_id: str, is_accessor: bool = False) -> Dict[str, Any]:
-        data = {}
-        if is_accessor:
-            name = "secret-id-accessor"
-            data["secret_id_accessor"] = secret_id
-        else:
-            name = "secret-id"
-            data["secret_id"] = secret_id
-
-        url = urllib.parse.urljoin(self._vault_address, f"v1/auth/{self._approle_mount_path}/role/{role_name}/{name}/lookup")
-        resp = self._http_pool.post(url=url, headers={TOKEN_HEADER: self._get_vault_token()}, data=data)
-        if resp.ok:
-            return resp.json()["data"]
-
-        raise VaultException(resp.status_code, url, resp.text)
-
-    @staticmethod
-    def _parse_validity_period_dates(data: Dict[str, str]) -> Tuple[Optional[datetime], Optional[datetime]]:
-        if not data or "creation_time" not in data:
-            return None, None
-
-        try:
-            creation_time = Utils.parse_timestamp(data["creation_time"])
-        except (ValueError, KeyError, TypeError):
-            logging.error("creation_time and expiration_time could not be parsed")
-            return None, None
-
-        if creation_time and "secret_id_ttl" in data:
-            expiration_time = creation_time + timedelta(seconds=data["secret_id_ttl"])
-            return creation_time, expiration_time
-
-        try:
-            expiration_time = Utils.parse_timestamp(data["expiration_time"])
-        except (ValueError, KeyError, TypeError):
-            logging.error("creation_time and expiration_time could not be parsed")
-            return creation_time, None
-
-        return creation_time, expiration_time
-
-    def rotate_secret_id(self, role_id: str, secret_id: str, role_name: str = None, rotation_strategy: SecretIdRotationStrategy = None) -> Dict:
-        if not SecretIdRotationStrategy:
-            rotation_strategy = ValidityPeriodRotationStrategy(DEFAULT_MIN_VALIDITY_PERIOD_PERCENT)
-
-        self._vault_token = self.login(role_id, secret_id)
-        data = self.lookup_secret_id(role_name, secret_id)
-        cidrs = list(set(data["cidr_list"] + data["token_bound_cidrs"]))
-        metadata = data["metadata"]
-
-        validity_period_percent = -1
-        creation_time, expiration_time = VaultClient._parse_validity_period_dates(data)
-        if creation_time and expiration_time:
-            validity_period_percent = max(0., (expiration_time - datetime.now(timezone.utc)).total_seconds() * 100. / (
-                        expiration_time - creation_time).total_seconds())
-
-        ret = {
-            "creation_time": creation_time,
-            "expiration_time": expiration_time,
-            "rotated_secret_id": False,
-            "validity_period_percent": validity_period_percent,
-            "parsing_errors": 1 if not creation_time or not expiration_time else 0
-        }
-
-        if rotation_strategy.rotate(creation_time, expiration_time):
-            ret["vault_response"] = self.set_secret_id(
-                role_name=role_name, secret_id=None, wrap_ttl=None, cidrs=cidrs, metadata=metadata
-            )
-            ret["rotated_secret_id"] = True
-
-        return ret
-
-    def login(self, role_id: str, secret_id: str) -> str:
-        """ Login using an Approle. Returns the client token after successful login. """
-        url = urllib.parse.urljoin(self._vault_address, f"v1/auth/{self._approle_mount_path}/login")
-        data = {"role_id": role_id, "secret_id": secret_id}
-        resp = self._http_pool.post(url=url, data=data)
-        if resp.ok:
-            return resp.json()["auth"]["client_token"]
-        raise VaultException(resp.status_code, url, resp.text)
-
-    def unwrap(self, token: str) -> Dict[str, Any]:
-        """ Unwraps a secret_id. """
-        url = urllib.parse.urljoin(self._vault_address, "v1/sys/wrapping/unwrap")
-        resp = self._http_pool.post(url=url, headers={TOKEN_HEADER: token})
-        if resp.ok:
-            return resp.json()["data"]
-        raise VaultException(resp.status_code, url, resp.text)
-
-    def list_groups(self) -> List[str]:
-        url = urllib.parse.urljoin(self._vault_address, "v1/identity/group/name?list=true")
-        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
-        if resp.ok:
-            return resp.json()["data"]["keys"]
-        # vault actually misuses this status code instead of returning an empty list with a correct status code
-        if resp.status_code == 404:
-            return []
-        raise VaultException(resp.status_code, url, resp.text)
-
-    def read_group(self, group_name: str) -> Dict[str, Any]:
-        url = urllib.parse.urljoin(self._vault_address, f"v1/identity/group/name/{group_name}")
-        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
-        if resp.ok:
-            return resp.json()["data"]
-        # vault actually misuses this status code instead of returning an empty list with a correct status code
-        if resp.status_code == 404:
-            return []
-        raise VaultException(resp.status_code, url, resp.text)
-
-    def list_entities(self) -> List[str]:
-        url = urllib.parse.urljoin(self._vault_address, "v1/identity/entity/name?list=true")
-        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
-        if resp.ok:
-            return resp.json()["data"]["keys"]
-        # vault actually misuses this status code instead of returning an empty list with a correct status code
-        if resp.status_code == 404:
-            return []
-        raise VaultException(resp.status_code, url, resp.text)
-
-    def read_entity(self, entity_name: str) -> Dict[str, Any]:
-        url = urllib.parse.urljoin(self._vault_address, f"v1/identity/entity/name/{entity_name}")
-        resp = self._http_pool.get(url=url, headers={TOKEN_HEADER: self._get_vault_token()})
-        if resp.ok:
-            return resp.json()["data"]
-        # vault actually misuses this status code instead of returning an empty list with a correct status code
-        if resp.status_code == 404:
-            return []
-        raise VaultException(resp.status_code, url, resp.text)
-
 
 def run_cmd(vault_client: VaultClient, args: argparse.Namespace, json_output: JsonOutput) -> None:
     available_commands = {}
@@ -388,7 +74,7 @@ def main() -> None:
         logging.error("Vault returned status_code %d for url %s: %s", err.status_code, err.url, err.text)
         output.communicate(False, {"status_code": err.status_code})
         sys.exit(1)
-    except requests.exceptions.ConnectionError as err:
+    except ConnectionError as err:
         logging.error("Could not talk to vault")
         output.communicate(False, {"error": f"could not communicate with vault: {err}"})
         sys.exit(1)
@@ -408,7 +94,7 @@ class CommandListRoles(Command):
     cmd_id = "list-roles"
 
     def run(self, args: argparse.Namespace) -> None:
-        role_names = self.vault_client.list_role_names()
+        role_names = self.vault_client.approle_list_role_names()
         self.output.communicate(True, {"role_names": role_names})
 
 
@@ -416,7 +102,7 @@ class CommandGetRoleId(Command):
     cmd_id = "get-role-id"
 
     def run(self, args: argparse.Namespace) -> None:
-        role_id = self.vault_client.get_role_id(args.role_name)
+        role_id = self.vault_client.approle_get_role_id(args.role_name)
         self.output.communicate(True, {"role_id": role_id, "role_name": args.role_name})
 
 
@@ -425,7 +111,7 @@ class CommandGetRole(Command):
 
     def run(self, args: argparse.Namespace) -> None:
         logging.info("Reading info for role %s", args.role_name)
-        resp = self.vault_client.get_role(args.role_name)
+        resp = self.vault_client.approle_get_role(args.role_name)
         self.output.communicate(True, resp)
         print(json.dumps(resp, indent=4, sort_keys=True))
 
@@ -434,7 +120,7 @@ class CommandDeleteRole(Command):
     cmd_id = "delete-role"
 
     def run(self, args: argparse.Namespace) -> None:
-        success = self.vault_client.delete_role(args.role_name)
+        success = self.vault_client.approle_delete_role(args.role_name)
         self.output.communicate(success, {"role_name": args.role_name})
         print(success)
 
@@ -448,7 +134,7 @@ class CommandUnwrapSecretId(Command):
             raise ValueError("Could not find token")
 
         ret = {
-            "vault_response": self.vault_client.unwrap(token)
+            "vault_response": self.vault_client.wrapping_unwrap(token)
         }
         Utils.process_new_secret_id(ret, args)
         self.output.communicate(True, ret)
@@ -459,7 +145,7 @@ class CommandLookupSecretId(Command):
 
     def run(self, args: argparse.Namespace) -> None:
         secret_id = ParsingUtils.get_secret_id(args)
-        resp = self.vault_client.lookup_secret_id(args.role_name, secret_id)
+        resp = self.vault_client.approle_lookup_secret_id(args.role_name, secret_id)
         self.output.communicate(True, resp)
         print(json.dumps(resp, indent=4, sort_keys=True))
 
@@ -468,9 +154,10 @@ class CommandLoginApprole(Command):
     cmd_id = "login"
 
     def run(self, args: argparse.Namespace) -> None:
+        role_id = ParsingUtils.get_role_id(args)
         secret_id = ParsingUtils.get_secret_id(args)
         logging.info("Trying to login to Approle...")
-        token = self.vault_client.login(args.role_id, secret_id)
+        token = self.vault_client.approle_login(role_id, secret_id)
         ret = {}
         if args.token_file:
             logging.info("Writing token to file '%s'", args.token_file)
@@ -487,13 +174,13 @@ class CommandDestroySecretId(Command):
 
     def run(self, args: argparse.Namespace) -> None:
         if args.secret_id_accessor:
-            destroyed = self.vault_client.destroy_secret_id_accessor(args.role_name, args.secret_id_accessor)
+            destroyed = self.vault_client.approle_destroy_secret_id_accessor(args.role_name, args.secret_id_accessor)
         else:
             if args.secret_id_file:
                 secret_id = Utils.read_from_file(args.secret_id_file)
             else:
                 secret_id = args.secret_id
-            destroyed = self.vault_client.destroy_secret_id(args.role_name, secret_id)
+            destroyed = self.vault_client.approle_destroy_secret_id(args.role_name, secret_id)
         self.output.communicate(destroyed, {"role_name": args.role_name})
 
 
@@ -501,7 +188,7 @@ class CommandDestroyAllSecretIds(Command):
     cmd_id = "destroy-all-secret-ids"
 
     def run(self, args: argparse.Namespace) -> None:
-        destroyed, errors = self.vault_client.destroy_secret_id_accessors(args.role_name)
+        destroyed, errors = self.vault_client.approle_destroy_secret_id_accessors(args.role_name)
         self.output.communicate(errors == 0, {"destroyed": destroyed, "errors": errors, "role_name": args.role_name})
 
 
@@ -509,7 +196,7 @@ class CommandListSecretIdAccessors(Command):
     cmd_id = "list-secret-id-accessors"
 
     def run(self, args: argparse.Namespace) -> None:
-        secret_id_accessors = self.vault_client.get_secret_id_accessors(args.role_name)
+        secret_id_accessors = self.vault_client.approle_get_secret_id_accessors(args.role_name)
         self.output.communicate(True, {"secret_id_accessors": secret_id_accessors, "role_name": args.role_name})
 
 
@@ -517,7 +204,7 @@ class CommandListEntities(Command):
     cmd_id = "list-entities"
 
     def run(self, args: argparse.Namespace) -> None:
-        entities = self.vault_client.list_entities()
+        entities = self.vault_client.identity_list_entities()
         self.output.communicate(True, {"entities": entities})
 
 
@@ -525,7 +212,7 @@ class CommandGetEntity(Command):
     cmd_id = "get-entity"
 
     def run(self, args: argparse.Namespace) -> None:
-        entity = self.vault_client.read_entity(args.entity_name)
+        entity = self.vault_client.identity_read_entity(args.entity_name)
         self.output.communicate(True, entity)
 
 
@@ -533,7 +220,7 @@ class CommandListGroups(Command):
     cmd_id = "list-groups"
 
     def run(self, args: argparse.Namespace) -> None:
-        groups = self.vault_client.list_groups()
+        groups = self.vault_client.identity_list_groups()
         self.output.communicate(True, {"groups": groups})
 
 
@@ -541,7 +228,7 @@ class CommandGetGroup(Command):
     cmd_id = "get-group"
 
     def run(self, args: argparse.Namespace) -> None:
-        group = self.vault_client.read_group(args.group_name)
+        group = self.vault_client.identity_read_group(args.group_name)
         self.output.communicate(True, group)
 
 
@@ -562,10 +249,10 @@ class CommandAddSecretId(Command):
             logging.info("Generating secret_id on server side")
 
         if args.destroy_others:
-            accessors = self.vault_client.get_secret_id_accessors(role_name)
+            accessors = self.vault_client.approle_get_secret_id_accessors(role_name)
             if accessors:
                 logging.info("Destroying other secret_id_accessors for role name %s", role_name)
-                destroyed, errors = self.vault_client.destroy_secret_id_accessors(role_name)
+                destroyed, errors = self.vault_client.approle_destroy_secret_id_accessors(role_name)
                 logging.info("Destroyed %d, encountered %d errors", destroyed, errors)
 
         cidr = args.limit_cidr
@@ -578,7 +265,7 @@ class CommandAddSecretId(Command):
         if cidr:
             logging.info("Using CIDRs '%s' as token and secret_id_bound_cidr and token_bound_cidr", cidr)
 
-        ret = {"vault_response": self.vault_client.set_secret_id(
+        ret = {"vault_response": self.vault_client.approle_set_secret_id(
             role_name=role_name, secret_id=secret_id, wrap_ttl=args.wrap_ttl, cidrs=cidr, metadata=args.metadata
         )}
 
@@ -595,12 +282,12 @@ class CommandRotateSecretId(Command):
         secret_id = ParsingUtils.get_secret_id(args)
         role_id = ParsingUtils.get_role_id(args)
 
-        rotation_strategy = ValidityPeriodRotationStrategy(args.min_validity_period)
+        rotation_strategy = ValidityPeriodApproleRotationStrategy(args.min_validity_period)
         if args.force_rotation:
-            rotation_strategy = StaticRotationStrategy()
+            rotation_strategy = StaticApproleRotationStrategy()
 
         logging.info("Creating new secret_id for role_name '%s' using strategy %s", role_name, rotation_strategy.__class__.__name__)
-        ret = self.vault_client.rotate_secret_id(role_id, secret_id, role_name, rotation_strategy=rotation_strategy)
+        ret = self.vault_client.approle_rotate_secret_id(role_id, secret_id, role_name, rotation_strategy=rotation_strategy)
         CommandRotateSecretId._log_rotation(ret["rotated_secret_id"], ret["creation_time"], ret["expiration_time"])
         if not ret["rotated_secret_id"]:
             # secret_id has not been rotated
@@ -610,14 +297,14 @@ class CommandRotateSecretId(Command):
         Utils.process_new_secret_id(ret, args)
 
         accessors_data = []
-        for secret_id_accessor in self.vault_client.get_secret_id_accessors(role_name):
-            accessors_data.append(self.vault_client.lookup_secret_id_accessor(role_name, secret_id_accessor))
+        for secret_id_accessor in self.vault_client.approle_get_secret_id_accessors(role_name):
+            accessors_data.append(self.vault_client.approle_lookup_secret_id_accessor(role_name, secret_id_accessor))
 
         logging.info("Fetched %d secret_id_accessors for role_name '%s'", len(accessors_data), role_name)
         sorted_accessors = sorted(accessors_data, key=lambda a: a["creation_time"], reverse=True)
         delete_secret_id_accessors = [a["secret_id_accessor"] for a in sorted_accessors[1:]]
-        ret["destroyed"], ret["errors"] = self.vault_client.destroy_secret_id_accessors(role_name,
-                                                                                   delete_secret_id_accessors)
+        ret["destroyed"], ret["errors"] = self.vault_client.approle_destroy_secret_id_accessors(role_name,
+                                                                                                delete_secret_id_accessors)
         logging.info("Destroyed %d secret_id_accessors, %d errors occured", ret["destroyed"], ret["errors"])
         self.output.communicate(True, ret)
 
@@ -637,24 +324,6 @@ class CommandRotateSecretId(Command):
 
 
 class Utils:
-    @staticmethod
-    def parse_timestamp(timestamp: str) -> Optional[datetime]:
-        try:
-            import iso8601
-            return iso8601.parse_date(timestamp)
-        except ImportError:
-            logging.error("Could not import package 'iso8601', please consider installing it")
-        except Exception:
-            pass
-
-        # here be dragons
-        try:
-            return datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S.%f%z')
-        except ValueError:
-            logging.error("Could not parse the timestamp '%s' using using strptime, please install 'iso8601'", timestamp)
-
-        raise ValueError(f"Could not parse timestamp '{timestamp}'")
-
     @staticmethod
     def lookup_host(hostname: str) -> List[str]:
         try:
@@ -682,7 +351,7 @@ class Utils:
         Path(file_path).expanduser().write_text(text)
 
     @staticmethod
-    def upsert_json_file(value: str, json_file: str, json_path: str = ".secret_id") -> None:
+    def upsert_json_file(value: str, json_file: str, json_path: str = SECRET_ID_DEFAULT_JSON_PATH) -> None:
         valid_json = False
         if Path(json_file).expanduser().exists():
             try:
@@ -895,7 +564,7 @@ class ParsingUtils:
         #############################################################################################
         lookup_secret_id = command_subparsers.add_parser(CommandLookupSecretId.cmd_id, help="Lookup a secret_id")
         lookup_secret_id.add_argument("-r", "--role-name", required=True)
-        lookup_secret_id.add_argument("--secret-id-json-path", default=".secret_id")
+        lookup_secret_id.add_argument("--secret-id-json-path", default=SECRET_ID_DEFAULT_JSON_PATH)
         group = lookup_secret_id.add_mutually_exclusive_group(required=True)
         group.add_argument("-s", "--secret-id", help="secret_id to use.")
         group.add_argument("--secret-id-file", help="Read secret_id from this file.")
@@ -905,9 +574,16 @@ class ParsingUtils:
         # login
         #############################################################################################
         login = command_subparsers.add_parser(CommandLoginApprole.cmd_id, help="Login to an approle")
-        login.add_argument("--secret-id-json-path", default=".secret_id")
-        login.add_argument("-r", "--role-id", required=True, help="role_id of the Approle to login.")
+        login.add_argument("--secret-id-json-path", default=SECRET_ID_DEFAULT_JSON_PATH)
         login.add_argument("--token-file", help="Write acquired token to this file.")
+        login.add_argument("--role-id-json-path", default=ROLE_ID_DEFAULT_JSON_PATH, help="JSON path to role-id")
+
+        group = login.add_mutually_exclusive_group(required=True)
+        group.add_argument("-r", "--role-id", help="The AppRole's role_id.")
+        group.add_argument("-rj", "--role-id-json-file", help="JSON encoded file that contains the AppRole's role_id")
+        group.set_defaults(**config_values)
+        group.required = ParsingUtils._is_supplied_by_config(group, config_values)
+
         group = login.add_mutually_exclusive_group(required=True)
         group.add_argument("-s", "--secret-id", help="secret_id to use.")
         group.add_argument("-si", "--secret-id-file", help="Read secret_id from this file.")
@@ -950,8 +626,8 @@ class ParsingUtils:
         # add-secret-id
         #############################################################################################
         add_secret_id = command_subparsers.add_parser(CommandAddSecretId.cmd_id, help="Add another secret-id to a role")
-        add_secret_id.add_argument("--role-name-json-path", default=".role_name")
-        add_secret_id.add_argument("--secret-id-json-path", default=".secret_id")
+        add_secret_id.add_argument("--role-name-json-path", default=ROLE_NAME_DEFAULT_JSON_PATH)
+        add_secret_id.add_argument("--secret-id-json-path", default=SECRET_ID_DEFAULT_JSON_PATH)
         add_secret_id.add_argument("-w", "--wrap-ttl", type=int, default=None, help="Wraps the secret_id. Argument is "
                                                                                     "specified in seconds")
         add_secret_id.add_argument("-a", "--auto-limit-cidr", help="Perform a DNS lookup against a host and "
@@ -978,9 +654,9 @@ class ParsingUtils:
         # rotate-secret-id
         #############################################################################################
         rotate_secret_id = command_subparsers.add_parser(CommandRotateSecretId.cmd_id, help="Rotate secret-id")
-        rotate_secret_id.add_argument("--role-name-json-path", default=".role_name", help="JSON path to role-name")
-        rotate_secret_id.add_argument("--role-id-json-path", default=".role_id", help="JSON path to role-id")
-        rotate_secret_id.add_argument("--secret-id-json-path", default=".secret_id", help="JSON path to secret-id")
+        rotate_secret_id.add_argument("--role-name-json-path", default=ROLE_NAME_DEFAULT_JSON_PATH, help="JSON path to role-name")
+        rotate_secret_id.add_argument("--role-id-json-path", default=ROLE_ID_DEFAULT_JSON_PATH, help="JSON path to role-id")
+        rotate_secret_id.add_argument("--secret-id-json-path", default=SECRET_ID_DEFAULT_JSON_PATH, help="JSON path to secret-id")
         rotate_secret_id.add_argument("--metric-file", help="File to write prometheus metrics to")
         rotate_secret_id.add_argument("--ignore-cidr", help="Ignore previously attached CIDRs")
         rotate_secret_id.add_argument("--force-rotation", action="store_true", help="Force the rotation")
@@ -1117,38 +793,6 @@ class PrometheusWrapperOutput:
         buffer.write(f'{self._metric_prefix}_invocation_timestamp_seconds {{role_name="{self.role_name}"}} {time.time()}\n')
 
         return buffer
-
-
-class StaticRotationStrategy(SecretIdRotationStrategy):
-    """Always rotate."""
-    def __init__(self, rotate: bool = True):
-        self._rotate = rotate
-
-    def rotate(self, creation_time: datetime, expiration_time: datetime) -> bool:
-        return self._rotate
-
-
-class ValidityPeriodRotationStrategy(SecretIdRotationStrategy):
-    """Rotate when reached x percent of validity period left."""
-
-    def __init__(self, min_validity_period: int):
-        if min_validity_period < 10 or min_validity_period > 90:
-            raise ValueError(f"min_lifetime_percentage should be [10, 90] but is: {min_validity_period}")
-        self.min_validity_period = min_validity_period
-
-    def rotate(self, creation_time: datetime, expiration_time: datetime) -> bool:
-        try:
-            lifetime_seconds = (expiration_time - creation_time).total_seconds()
-            seconds_until_expiration = (expiration_time - datetime.now(timezone.utc)).total_seconds()
-            if seconds_until_expiration <= 0:
-                return True
-
-            validity_period = seconds_until_expiration * 100. / lifetime_seconds
-            logging.info("secret_id validity period at %f%%, valid from %s until %s", validity_period, creation_time, expiration_time)
-            return validity_period <= self.min_validity_period
-        except TypeError as err:
-            logging.error("Can not compute remaining validity period of secret_id: %s", err)
-            return True
 
 
 if __name__ == "__main__":
