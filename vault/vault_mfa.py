@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import subprocess
 import sys
 
 from abc import ABC, abstractmethod
@@ -42,6 +43,18 @@ class TotpFileOutput(AbstractTotpSecretOutput):
         Utils.write_text_to_file(totp_secret, self._path)
 
 
+class PassPasswordManagerConsumer(AbstractTotpSecretOutput):
+    def __init__(self, secret_path: str):
+        self._secret_path = secret_path
+
+    def consume(self, totp_secret: str) -> None:
+        cmd = ['pass', 'insert', '--multiline', self._secret_path]
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        output, error = proc.communicate(input=totp_secret.encode())
+        if error:
+            raise Exception(f"Error inserting string into pass: {error.decode()}")
+
+
 def build_output(args: argparse.Namespace) -> AbstractTotpSecretOutput:
     if args.output_std:
         return TotpStdOutput()
@@ -73,9 +86,14 @@ def run(vault_client: VaultClient, args: argparse.Namespace) -> None:
         logging.info("No entity_id provided, using entity tied to VAULT_TOKEN")
         otp_url = vault_client.totp_generate_secret(method_id=method_id)
 
-    if otp_url:
-        logging.info("Successfully created new TOTP secret")
-        output.consume(otp_url)
+    if not otp_url:
+        return
+
+    logging.info("Successfully created new TOTP secret")
+    output.consume(otp_url)
+    if args.pass_path:
+        pass_output = PassPasswordManagerConsumer(args.pass_path)
+        pass_output.consume(otp_url)
 
 
 def main() -> None:
@@ -137,6 +155,8 @@ class ParsingUtils:
         parser.add_argument("-m", "--method-id")
         parser.add_argument("-f", "--force", help="Delete and create new secret if existing", action="store_true",
                             default=False)
+
+        parser.add_argument("-p", "--pass-path", help="Also write TOTP to 'pass' password manager under the given path")
 
         output_group = parser.add_mutually_exclusive_group(required=False)
         output_group.add_argument('--output-qr', action="store_true", default=True)
