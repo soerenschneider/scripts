@@ -150,7 +150,7 @@ class VaultClient:
 
         json_data = resp.json()
 
-        logging.info("Received credentials, valid for %s (req-id: %s)", json_data["lease_duration"], json_data["request_id"])
+        logging.info("Received credentials, valid for %ss (req-id: %s)", json_data["lease_duration"], json_data["request_id"])
         return AwsCredentials(access_key_id=json_data["data"]["access_key"],
                               secret_access_key=json_data["data"]["secret_key"])
 
