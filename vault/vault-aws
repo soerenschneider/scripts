@@ -55,7 +55,11 @@ def update_credentials_file(profile: str, creds: AwsCredentials) -> None:
 
     config[profile] = creds.to_dict()
 
-    with open(CREDENTIALS_FILENAME, 'w', encoding="utf-8") as configfile:
+    mode = "w"
+    if not os.path.exists(CREDENTIALS_FILENAME):
+        mode = "x"
+        os.makedirs(os.path.dirname(CREDENTIALS_FILENAME), exist_ok=True)
+    with open(CREDENTIALS_FILENAME, mode, encoding="utf-8") as configfile:
         config.write(configfile)
 
 def run(client: VaultClient, args: argparse.Namespace) -> None:
