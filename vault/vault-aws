@@ -84,7 +84,12 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
     args = parse_args()
     client = VaultClient(addr=args.vault_address, token=args.vault_token, aws_mount_path=args.mount_path)
-    run(client, args)
+    try:
+        run(client, args)
+    except VaultException:
+        logging.error("No valid vault auth")
+        sys.exit(1)
+
 
 
 if __name__ == "__main__":
