@@ -97,7 +97,7 @@ def main():
             print("Not forcing re-creation of volume, exiting.")
             sys.exit(1)
 
-        impl.shutdown_domain(args.vol_name)
+        impl.shutdown_domain(args.domain_name)
         impl.remove_volume(vg_name=args.vg_name, volume_name=args.vol_name)
 
     impl.create_volume(vg_name=args.vg_name, vol_name=args.vol_name, base_image=args.base_image, vm_size_g=args.vol_size)
