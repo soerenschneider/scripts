@@ -99,6 +99,7 @@ def main():
 
         impl.shutdown_domain(args.domain_name)
         impl.remove_volume(vg_name=args.vg_name, volume_name=args.vol_name)
+        impl.start_domain(args.domain_name)
 
     impl.create_volume(vg_name=args.vg_name, vol_name=args.vol_name, base_image=args.base_image, vm_size_g=args.vol_size)
 
