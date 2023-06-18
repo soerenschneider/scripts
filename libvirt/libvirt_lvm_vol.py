@@ -163,7 +163,7 @@ def _extract_date_from_filename(filename: str) -> str:
     return ""
 
 
-def hostname_without_domain(hostname: str) -> str:
+def _hostname_without_domain(hostname: str) -> str:
     parts = hostname.split('.')
     if len(parts) > 1:
         return parts[0]
@@ -175,15 +175,15 @@ def iterate_vms(datacenter: str, vm_host: str, hosts_data: Dict[str, any], args:
         return
 
     impl = NoopCalls() if args.dry_run else None
-    simple_hostname = hostname_without_domain(vm_host)
+    simple_hostname = _hostname_without_domain(vm_host)
     for host in hosts_data["local_hosts"][datacenter]:
         if "vm_config" not in host or host["vm_config"]["host"] not in [simple_hostname, vm_host]:
             continue
 
         vm_name = host["host"]
         disk_size = host["vm_config"]["disk_size_b"] / (1024 ** 3)
-        os = host["vm_config"]["os"]
-        base_image = find_baseimage(args.base_image_dir, os)
+        wanted_os = host["vm_config"]["os"]
+        base_image = find_baseimage(args.base_image_dir, wanted_os)
         if not base_image:
             logging.error("could not find any images for '%s' in dir '%s'", os, args.base_image_dir)
             continue
@@ -191,7 +191,7 @@ def iterate_vms(datacenter: str, vm_host: str, hosts_data: Dict[str, any], args:
         create_volume(vg_name=args.vg_name, vol_name=vm_name, base_image=base_image, vol_size=disk_size, domain_name=vm_name, force_recreate=args.force_recreate, impl=impl)
 
 
-def detect_datacenter(hostname: str) -> Optional[str]:
+def _detect_datacenter(hostname: str) -> Optional[str]:
     pattern = r'\.([^.\s]+)\.[^.]+\.[^.]+$'
     match = re.search(pattern, hostname)
 
@@ -201,7 +201,7 @@ def detect_datacenter(hostname: str) -> Optional[str]:
     return None
 
 
-def get_hosts_data(hosts_file: str) -> Dict[str, any]:
+def _get_hosts_data(hosts_file: str) -> Dict[str, any]:
     if hosts_file.startswith("http://") or hosts_file.startswith("https://"):
         data = requests.get(hosts_file)
         return yaml.safe_load(data)
@@ -239,14 +239,14 @@ def main():
 
     if args.subcommand == subcommands["sync"]:
         vm_host = args.vm_host if args.vm_host else socket.gethostname()
-        datacenter = detect_datacenter(vm_host)
+        datacenter = _detect_datacenter(vm_host)
         if not datacenter:
             logging.error("could not detect datacenter from hostname %s", vm_host)
             sys.exit(1)
         else:
             logging.info("Detected datacenter '%s' from hostname '%s'", datacenter, vm_host)
 
-        hosts_data = get_hosts_data(args.hosts_file)
+        hosts_data = _get_hosts_data(args.hosts_file)
         logging.info("Loaded hosts_data with %d entries for this dc", len(hosts_data["local_hosts"][datacenter]))
         iterate_vms(datacenter=datacenter, vm_host=vm_host, hosts_data=hosts_data, args=args)
     elif args.subcommand == subcommands["create"]:

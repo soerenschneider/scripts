@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from libvirt_lvm_vol import detect_datacenter, _filter_images
+from libvirt_lvm_vol import _detect_datacenter, _filter_images
 
 
 class Test(TestCase):
@@ -14,7 +14,7 @@ class Test(TestCase):
 
         for key in expected_output:
             want = expected_output[key]
-            got = detect_datacenter(key)
+            got = _detect_datacenter(key)
             if want != got:
                 self.fail(f"expected {want}, got {got}")
             else:
@@ -28,7 +28,7 @@ class Test(TestCase):
 
         for example in anti_examples:
             want = None
-            got = detect_datacenter(example)
+            got = _detect_datacenter(example)
             if want != got:
                 self.fail(f"expected {want}, got {got}")
 
