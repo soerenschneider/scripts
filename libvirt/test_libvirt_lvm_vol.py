@@ -32,8 +32,6 @@ class Test(TestCase):
             if want != got:
                 self.fail(f"expected {want}, got {got}")
 
-
-class Test(TestCase):
     def test__filter_images_almalinux(self):
         images = [
             "AlmaLinux-9-GenericCloud-9.2-20230301.x86_64.qcow2",
