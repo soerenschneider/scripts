@@ -48,6 +48,8 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
 
     if args.subcommand not in subcommands.values():
+        parser.print_help()
+        print()
         print(f"No subcommand given, expected one of {subcommands.values()}")
         sys.exit(1)
 
