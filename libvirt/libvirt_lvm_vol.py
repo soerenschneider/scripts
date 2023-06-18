@@ -82,6 +82,7 @@ class Calls(ABC):
     def remove_volume(self, vg_name: str, volume_name: str):
         pass
 
+    @abstractmethod
     def is_domain_running(self, vm_name: str) -> bool:
         return False
 
