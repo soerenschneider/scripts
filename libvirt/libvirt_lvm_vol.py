@@ -13,7 +13,7 @@ import os
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Tuple
 
 
 default_vg_name = "libvirt"
@@ -28,8 +28,9 @@ subcommands = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="manage libvirt lvm volumes")
-    parser.add_argument("--vg-name", "-v", type=str, default=None, help="Name of the volume group")
-    parser.add_argument("--force-recreate", "-f", type=bool, default=None, action=argparse.BooleanOptionalAction, help="Delete and re-create existing volumes")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--force-recreate", "-f", type=bool, default=False, action=argparse.BooleanOptionalAction, help="Delete and re-create existing volumes")
+    group.add_argument("--interactive", "-i", type=bool, default=None, action=argparse.BooleanOptionalAction, help="Interactively prompt for confirmation")
     parser.add_argument("--dry-run", "-n", type=bool, default=None, action=argparse.BooleanOptionalAction, help="Delete and re-create existing volumes")
 
     subparsers = parser.add_subparsers(title='Subcommands', dest='subcommand')
@@ -39,6 +40,7 @@ def parse_args() -> argparse.Namespace:
     sync.add_argument("--vm-host", type=str, default=None, help="The host name of the host the VMs should be scheduled. Usually this is auto detected.")
 
     cmd_create_volume = subparsers.add_parser(subcommands["create"], help='Subcommand 1 help')
+    cmd_create_volume.add_argument("--vg-name", "-v", type=str, default=None, help="Name of the volume group")
     cmd_create_volume.add_argument("--vol-size", "-s", type=int, default=None, help="Size of the volume in GiB")
     cmd_create_volume.add_argument("--vol-name", "-n", required=True, type=str, default=None, help="Name of the volume")
     cmd_create_volume.add_argument("--base-image", "-b", required=True, type=str, default=None, help="Base image to use")
@@ -65,6 +67,33 @@ def parse_args() -> argparse.Namespace:
             args.vol_size = default_vol_size_g
 
     return args
+
+
+# Is used when a choice is to be made, for example when a volume needs to be recreated
+class UserInteraction(ABC):
+    def proceed(self) -> bool:
+        pass
+
+
+# Always answer with a preconfigured answer.
+class NonInteractive(UserInteraction):
+    def __init__(self, proceed: bool):
+        self._proceed = proceed
+
+    def proceed(self) -> bool:
+        return self._proceed
+
+
+# Let the user interactively decide.
+class Interactive(UserInteraction):
+    def proceed(self) -> bool:
+        while True:
+            user_input = input(f"Do you want to proceed (y/n): ").strip().lower()
+            if user_input in ['y', 'yes']:
+                return True
+            elif user_input in ['n', 'no']:
+                return False
+            print("Invalid input. Please enter 'y' or 'n'.")
 
 
 class Calls(ABC):
@@ -184,11 +213,11 @@ def find_baseimage(base_dir: str, file_name: str) -> Optional[str]:
 
 
 def _filter_images(matching_files: List[str]) -> Optional[str]:
-    sorted_files = sorted(matching_files, key=lambda x: _extract_date_from_filename(x), reverse=True)
-    if sorted_files:
-        return sorted_files[0]
+    if not matching_files:
+        return None
 
-    return None
+    sorted_files = sorted(matching_files, key=lambda x: _extract_date_from_filename(x), reverse=True)
+    return sorted_files[0]
 
 
 def _extract_date_from_filename(filename: str) -> str:
@@ -206,7 +235,7 @@ def _hostname_without_domain(hostname: str) -> str:
     return hostname
 
 
-def iterate_vms(datacenter: str, vm_host: str, hosts_data: Dict[str, any], args: argparse.Namespace, impl: Calls) -> None:
+def iterate_vms(datacenter: str, vm_host: str, hosts_data: Dict[str, any], args: argparse.Namespace, impl: Calls, prompt: UserInteraction) -> None:
     if datacenter not in hosts_data['local_hosts']:
         return
 
@@ -215,15 +244,26 @@ def iterate_vms(datacenter: str, vm_host: str, hosts_data: Dict[str, any], args:
         if "vm_config" not in host or host["vm_config"]["host"] not in [simple_hostname, vm_host]:
             continue
 
-        vm_name = host["host"]
-        disk_size = host["vm_config"]["disk_size_b"] / (1024 ** 3)
         wanted_os = host["vm_config"]["os"]
         base_image = find_baseimage(args.base_image_dir, wanted_os)
         if not base_image:
             logging.error("could not find any images for '%s' in dir '%s'", wanted_os, args.base_image_dir)
             continue
 
-        create_volume(vg_name=args.vg_name, vol_name=vm_name, base_image=base_image, vol_size=disk_size, domain_name=vm_name, force_recreate=args.force_recreate, impl=impl)
+        block_devices = host["block_devices"]
+        if not block_devices:
+            logging.error("no block devices configured, skipping")
+            continue
+
+        vg_name, vol_name = find_lvm_info(block_devices)
+        if not vg_name or not vol_name:
+            logging.error("no vg_name / vol_name found, skipping")
+            continue
+
+        vm_name = host["host"]
+        disk_size = host["vm_config"]["disk_size_b"] / (1024 ** 3)
+
+        create_volume(vg_name=vg_name, vol_name=vol_name, base_image=base_image, vol_size=disk_size, domain_name=vm_name, force_recreate=args.force_recreate, impl=impl, promp=prompt)
 
 
 def _detect_datacenter(hostname: str) -> Optional[str]:
@@ -245,16 +285,40 @@ def _get_hosts_data(hosts_file: str) -> Dict[str, any]:
         return yaml.safe_load(file)
 
 
-def create_volume(vg_name: str, vol_name: str, base_image: str, impl: Calls, vol_size: int = None, domain_name: str = None, force_recreate: bool = False):
+def find_lvm_info(block_devices: List[str]) -> Optional[Union[str, str]]:
+    for device in block_devices:
+        if is_dm_device(device):
+            return _parse_volgroup_volname(device)
+    return None
+
+
+def is_dm_device(name: str) -> bool:
+    pattern = r'^/dev/mapper/[a-zA-Z0-9_-]+-[a-zA-Z0-9_-]+$'
+    return bool(re.match(pattern, name))
+
+
+def _parse_volgroup_volname(name: str) -> Tuple[str, str]:
+    if not name.startswith("/dev/mapper/"):
+        raise ValueError(f"{name} is not a valid dm device")
+
+    parts = name.replace("/dev/mapper/", "", 1).split('-')
+    if len(parts) != 2:
+        raise ValueError(f"{name} is not a valid dm device")
+
+    return parts[0], parts[1]
+
+
+def create_volume(vg_name: str, vol_name: str, base_image: str, impl: Calls, vol_size: int = None, prompt = UserInteraction, domain_name: str = None, force_recreate: bool = False):
     if not domain_name:
         domain_name = vol_name
+
     if not vol_size:
         vol_size = default_vol_size_g
 
     logging.info("Creating volume for %s/%s", vg_name, vol_name)
     if impl.volume_exists(vg_name=vg_name, vol_name=vol_name):
         logging.warning("volume '%s' already exists", vol_name)
-        if not force_recreate:
+        if not prompt.proceed():
             logging.error("Not forcing re-creation of volume, exiting.")
             return
 
@@ -279,6 +343,7 @@ def main():
     args = parse_args()
 
     impl = NoopCalls() if args.dry_run else NativeBinaries()
+    prompt = Interactive() if args.force_recreate is None else NonInteractive(proceed=args.force_recreate)
 
     if not impl.vg_exists(args.vg_name):
         logging.error("volume group '%s' does not exist", args.vg_name)
@@ -295,9 +360,13 @@ def main():
 
         hosts_data = _get_hosts_data(args.hosts_file)
         logging.info("Loaded hosts_data with %d entries for dc %s", len(hosts_data["local_hosts"][datacenter]), datacenter)
-        iterate_vms(datacenter=datacenter, vm_host=vm_host, hosts_data=hosts_data, args=args, impl=impl)
+        iterate_vms(datacenter=datacenter, vm_host=vm_host, hosts_data=hosts_data, args=args, impl=impl, prompt=prompt)
     elif args.subcommand == subcommands["create"]:
-        create_volume(vg_name=args.vg_name, vol_name=args.vol_name, base_image=args.base_image, impl=impl, vol_size=args.vol_size, domain_name=args.domain_name, force_recreate=args.force_recreate)
+        base_image = Path(args.base_image)
+        if not base_image.is_file() or not base_image.exists():
+            raise ValueError(f"base image '%s' must be a file and must exist")
+
+        create_volume(vg_name=args.vg_name, vol_name=args.vol_name, base_image=args.base_image, impl=impl, prompt=prompt, vol_size=args.vol_size, domain_name=args.domain_name, force_recreate=args.force_recreate)
 
 
 if __name__ == "__main__":

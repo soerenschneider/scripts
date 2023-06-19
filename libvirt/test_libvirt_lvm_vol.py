@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from libvirt_lvm_vol import _detect_datacenter, _filter_images
+from libvirt_lvm_vol import _detect_datacenter, _filter_images, is_dm_device, _parse_volgroup_volname
 
 
 class Test(TestCase):
@@ -46,6 +46,16 @@ class Test(TestCase):
         if want != got:
             self.fail(f"wanted {want}, got {got}")
 
+    def test__filter_images_no_versioning(self):
+        images = [
+            "base-debian-12",
+        ]
+        want = "base-debian-12"
+        got = _filter_images(images)
+
+        if want != got:
+            self.fail(f"wanted {want}, got {got}")
+
     def test__filter_images_debian(self):
         images = [
             "garbage",
@@ -59,3 +69,44 @@ class Test(TestCase):
 
         if want != got:
             self.fail(f"wanted {want}, got {got}")
+
+    def test_is_dm_device(self):
+        expected_output = {
+            "/dev/mapper/am-arsch": True,
+            "/dev/mapper/a-b": True,
+            "/dev/mapper/": False,
+            "/dev/sda": False,
+        }
+
+        for key in expected_output:
+            want = expected_output[key]
+            got = is_dm_device(key)
+            if want != got:
+                self.fail(f"expected {want}, got {got}")
+
+
+    def test_extract_vg_lv(self):
+        expected_output = {
+            "/dev/mapper/vg-lv": ("vg", "lv"),
+            "/dev/mapper/under_score-volume": ("under_score", "volume"),
+            "/dev/mapper/a-b": ("a", "b"),
+        }
+
+        for key in expected_output:
+            want = expected_output[key]
+            got = _parse_volgroup_volname(key)
+            if want != got:
+                self.fail(f"expected {want}, got {got}")
+
+        def test_extract_vg_lv_anti(self):
+            expected_output = [
+                "",
+                "vg-lv",
+            ]
+
+        for key in expected_output:
+            try:
+                _parse_volgroup_volname(key)
+                self.fail(f"expected expection for input '{key}'")
+            except ValueError:
+                pass
