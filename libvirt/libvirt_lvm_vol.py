@@ -34,12 +34,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", "-n", type=bool, default=None, action=argparse.BooleanOptionalAction, help="Delete and re-create existing volumes")
 
     subparsers = parser.add_subparsers(title='Subcommands', dest='subcommand')
-    sync = subparsers.add_parser(subcommands["sync"], help='Subcommand 1 help')
+    sync = subparsers.add_parser(subcommands["sync"], help='Read information from hosts file and (re-)create volumes')
     sync.add_argument("--hosts-file", type=str, required=True, help="File or http link to hosts definition file")
     sync.add_argument("--base-image-dir", "-b", required=True, type=str, default=None, help="Dir containing base images")
     sync.add_argument("--vm-host", type=str, default=None, help="The host name of the host the VMs should be scheduled. Usually this is auto detected.")
 
-    cmd_create_volume = subparsers.add_parser(subcommands["create"], help='Subcommand 1 help')
+    cmd_create_volume = subparsers.add_parser(subcommands["create"], help='Create a new volume on-the-fly')
     cmd_create_volume.add_argument("--vg-name", "-v", type=str, default=None, help="Name of the volume group")
     cmd_create_volume.add_argument("--vol-size", "-s", type=int, default=None, help="Size of the volume in GiB")
     cmd_create_volume.add_argument("--vol-name", "-n", required=True, type=str, default=None, help="Name of the volume")
