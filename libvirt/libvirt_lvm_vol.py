@@ -285,7 +285,7 @@ def _get_hosts_data(hosts_file: str) -> Dict[str, any]:
         return yaml.safe_load(file)
 
 
-def find_lvm_info(block_devices: List[str]) -> Optional[Union[str, str]]:
+def find_lvm_info(block_devices: List[str]) -> Optional[Tuple[str, str]]:
     for device in block_devices:
         if is_dm_device(device):
             return _parse_volgroup_volname(device)
