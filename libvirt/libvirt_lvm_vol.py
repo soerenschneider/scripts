@@ -55,11 +55,11 @@ def parse_args() -> argparse.Namespace:
         print(f"No subcommand given, expected one of {subcommands.values()}")
         sys.exit(1)
 
-    # Assign the parsed values to the variables
-    if not args.vg_name:
-        args.vg_name = default_vg_name
-
     if args.subcommand == subcommands["create"]:
+        # Assign the parsed values to the variables
+        if not args.vg_name:
+            args.vg_name = default_vg_name
+
         if not args.domain_name:
             args.domain_name = args.vol_name
 
@@ -345,10 +345,6 @@ def main():
     impl = NoopCalls() if args.dry_run else NativeBinaries()
     prompt = Interactive() if args.force_recreate is None else NonInteractive(proceed=args.force_recreate)
 
-    if not impl.vg_exists(args.vg_name):
-        logging.error("volume group '%s' does not exist", args.vg_name)
-        sys.exit(1)
-
     if args.subcommand == subcommands["sync"]:
         vm_host = args.vm_host if args.vm_host else socket.gethostname()
         datacenter = _detect_datacenter(vm_host)
@@ -362,6 +358,9 @@ def main():
         logging.info("Loaded hosts_data with %d entries for dc %s", len(hosts_data["local_hosts"][datacenter]), datacenter)
         iterate_vms(datacenter=datacenter, vm_host=vm_host, hosts_data=hosts_data, args=args, impl=impl, prompt=prompt)
     elif args.subcommand == subcommands["create"]:
+        if not impl.vg_exists(args.vg_name):
+            logging.error("volume group '%s' does not exist", args.vg_name)
+            sys.exit(1)
         base_image = Path(args.base_image)
         if not base_image.is_file() or not base_image.exists():
             raise ValueError(f"base image '%s' must be a file and must exist")
