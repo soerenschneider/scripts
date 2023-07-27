@@ -263,7 +263,7 @@ def iterate_vms(datacenter: str, vm_host: str, hosts_data: Dict[str, any], args:
         vm_name = host["host"]
         disk_size = host["vm_config"]["disk_size_b"] / (1024 ** 3)
 
-        create_volume(vg_name=vg_name, vol_name=vol_name, base_image=base_image, vol_size=disk_size, domain_name=vm_name, force_recreate=args.force_recreate, impl=impl, promp=prompt)
+        create_volume(vg_name=vg_name, vol_name=vol_name, base_image=base_image, vol_size=disk_size, domain_name=vm_name, force_recreate=args.force_recreate, impl=impl, prompt=prompt)
 
 
 def _detect_datacenter(hostname: str) -> Optional[str]:
