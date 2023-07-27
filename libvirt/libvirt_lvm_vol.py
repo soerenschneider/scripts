@@ -250,7 +250,7 @@ def iterate_vms(datacenter: str, vm_host: str, hosts_data: Dict[str, any], args:
             logging.error("could not find any images for '%s' in dir '%s'", wanted_os, args.base_image_dir)
             continue
 
-        block_devices = host["block_devices"]
+        block_devices = host["vm_config"]["block_devices"]
         if not block_devices:
             logging.error("no block devices configured, skipping")
             continue
