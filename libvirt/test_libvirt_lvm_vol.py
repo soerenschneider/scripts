@@ -100,11 +100,11 @@ class Test(TestCase):
             if want != got:
                 self.fail(f"expected {want}, got {got}")
 
-        def test_extract_vg_lv_anti(self):
-            expected_output = [
-                "",
-                "vg-lv",
-            ]
+    def test_extract_vg_lv_anti(self):
+        expected_output = [
+            "",
+            "vg-lv",
+        ]
 
         for key in expected_output:
             try:
