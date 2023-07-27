@@ -74,6 +74,7 @@ class Test(TestCase):
         expected_output = {
             "/dev/mapper/am-arsch": True,
             "/dev/mapper/a-b": True,
+            "/dev/mapper/libvirt_evo_970_1-nas": True,
             "/dev/mapper/": False,
             "/dev/sda": False,
         }
@@ -89,6 +90,7 @@ class Test(TestCase):
         expected_output = {
             "/dev/mapper/vg-lv": ("vg", "lv"),
             "/dev/mapper/under_score-volume": ("under_score", "volume"),
+            "/dev/mapper/libvirt_evo_970_1-fileserver": ("libvirt_evo_970_1", "fileserver"),
             "/dev/mapper/a-b": ("a", "b"),
         }
 
