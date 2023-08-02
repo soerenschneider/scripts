@@ -2,23 +2,22 @@
 
 import argparse
 import logging
+import os
 import re
 import socket
 import subprocess
 import sys
 
-import requests
-import yaml
-import os
-
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, Optional, List, Tuple
 
+import requests
+import yaml
 
-default_vg_name = "libvirt"
-default_vol_size_g = 20
-known_datacenters = ["dd", "ez", "pt", "rs"]
+DEFAULT_VG_NAME = "libvirt"
+DEFAULT_VOL_SIZE_G = 20
+KNOWN_DATACENTERS = ["dd", "ez", "pt", "rs"]
 
 subcommands = {
     "sync": "sync",
@@ -58,25 +57,25 @@ def parse_args() -> argparse.Namespace:
     if args.subcommand == subcommands["create"]:
         # Assign the parsed values to the variables
         if not args.vg_name:
-            args.vg_name = default_vg_name
+            args.vg_name = DEFAULT_VG_NAME
 
         if not args.domain_name:
             args.domain_name = args.vol_name
 
         if not args.vol_size:
-            args.vol_size = default_vol_size_g
+            args.vol_size = DEFAULT_VOL_SIZE_G
 
     return args
 
 
 # Is used when a choice is to be made, for example when a volume needs to be recreated
-class UserInteraction(ABC):
+class UserInteraction(ABC):  # pylint: disable=too-few-public-methods
     def proceed(self) -> bool:
         pass
 
 
 # Always answer with a preconfigured answer.
-class NonInteractive(UserInteraction):
+class NonInteractive(UserInteraction):  # pylint: disable=too-few-public-methods
     def __init__(self, proceed: bool):
         self._proceed = proceed
 
@@ -85,13 +84,13 @@ class NonInteractive(UserInteraction):
 
 
 # Let the user interactively decide.
-class Interactive(UserInteraction):
+class Interactive(UserInteraction):  # pylint: disable=too-few-public-methods
     def proceed(self) -> bool:
         while True:
-            user_input = input(f"Do you want to proceed (y/n): ").strip().lower()
+            user_input = input("Do you want to proceed (y/n): ").strip().lower()
             if user_input in ['y', 'yes']:
                 return True
-            elif user_input in ['n', 'no']:
+            if user_input in ['n', 'no']:
                 return False
             print("Invalid input. Please enter 'y' or 'n'.")
 
@@ -134,16 +133,16 @@ class NoopCalls(Calls):
         return False
 
     def create_volume(self, vg_name: str, vol_name: str, base_image: Path, vol_size: int) -> None:
-        logging.info("create volume for %s/%s using %s (%dGiB)", vg_name, vol_name, base_image, vol_size)
+        print(f"create volume for {vg_name}/{vol_name} using {base_image} ({vol_size}GiB)")
 
     def remove_volume(self, vg_name: str, volume_name: str):
-        print(f"remove volume for %s/%s", vg_name, volume_name)
+        print(f"remove volume for {vg_name}/{volume_name}")
 
     def shutdown_domain(self, domain_name: str):
-        print(f"shutdown domain %s", domain_name)
+        print(f"shutdown domain {domain_name}")
 
     def start_domain(self, domain_name):
-        print(f"start domain %s", domain_name)
+        print(f"start domain {domain_name}")
 
     def is_domain_running(self, vm_name: str) -> bool:
         return False
@@ -168,7 +167,7 @@ class NativeBinaries(Calls):
 
     def create_volume(self, vg_name: str, vol_name: str, base_image: Path, vol_size: int = None):
         if not vol_size:
-            vol_size = default_vol_size_g
+            vol_size = DEFAULT_VOL_SIZE_G
 
         subprocess.run(["lvcreate", "-L", f"{vol_size}G", "-n", vol_name, vg_name], check=True)
         dst = f"/dev/mapper/{vg_name}-{vol_name}"
@@ -185,8 +184,8 @@ class NativeBinaries(Calls):
             result = subprocess.run(['virsh', 'list', '--name'], capture_output=True, text=True, check=True)
             output = result.stdout
             return vm_name in output.splitlines()
-        except subprocess.CalledProcessError as e:
-            logging.error("Error talking to libvirt", e)
+        except subprocess.CalledProcessError as err:
+            logging.error("Error talking to libvirt: %s", err)
             return False
 
     def shutdown_domain(self, domain_name: str):
@@ -196,7 +195,7 @@ class NativeBinaries(Calls):
 
     def start_domain(self, domain_name: str):
         command = ["virsh", "start", domain_name]
-        subprocess.run(command)
+        subprocess.run(command, check=True)
 
 
 def find_baseimage(base_dir: str, file_name: str) -> Optional[str]:
@@ -204,7 +203,7 @@ def find_baseimage(base_dir: str, file_name: str) -> Optional[str]:
 
     file_name = file_name.lower()
 
-    for root, dirs, files in os.walk(base_dir):
+    for root, _, files in os.walk(base_dir):
         for file in files:
             if file_name in str(file).lower():
                 matching_files.append(os.path.join(root, file))
@@ -216,7 +215,7 @@ def _filter_images(matching_files: List[str]) -> Optional[str]:
     if not matching_files:
         return None
 
-    sorted_files = sorted(matching_files, key=lambda x: _extract_date_from_filename(x), reverse=True)
+    sorted_files = sorted(matching_files, key=_extract_date_from_filename, reverse=True)
     return sorted_files[0]
 
 
@@ -270,7 +269,7 @@ def _detect_datacenter(hostname: str) -> Optional[str]:
     pattern = r'\.([^.\s]+)\.[^.]+\.[^.]+$'
     match = re.search(pattern, hostname)
 
-    if match and  match.group(1) in known_datacenters:
+    if match and  match.group(1) in KNOWN_DATACENTERS:
         return match.group(1)
 
     return None
@@ -278,7 +277,7 @@ def _detect_datacenter(hostname: str) -> Optional[str]:
 
 def _get_hosts_data(hosts_file: str) -> Dict[str, any]:
     if hosts_file.startswith("http://") or hosts_file.startswith("https://"):
-        data = requests.get(hosts_file)
+        data = requests.get(hosts_file, timeout=5)
         return yaml.safe_load(data)
 
     with open(hosts_file, 'r', encoding="utf8") as file:
@@ -313,12 +312,12 @@ def create_volume(vg_name: str, vol_name: str, base_image: str, impl: Calls, vol
         domain_name = vol_name
 
     if not vol_size:
-        vol_size = default_vol_size_g
+        vol_size = DEFAULT_VOL_SIZE_G
 
     logging.info("Creating volume for %s/%s", vg_name, vol_name)
     if impl.volume_exists(vg_name=vg_name, vol_name=vol_name):
         logging.warning("volume '%s' already exists", vol_name)
-        if not prompt.proceed():
+        if not prompt.proceed() and not force_recreate:
             logging.error("Not forcing re-creation of volume, exiting.")
             return
 
@@ -333,8 +332,8 @@ def create_volume(vg_name: str, vol_name: str, base_image: str, impl: Calls, vol
 
     try:
         impl.create_volume(vg_name=vg_name, vol_name=vol_name, base_image=base_image, vol_size=vol_size)
-    except subprocess.CalledProcessError as e:
-        logging.error("creating volume failed: %s", e)
+    except subprocess.CalledProcessError as err:
+        logging.error("creating volume failed: %s", err)
 
 
 def main():
@@ -363,7 +362,7 @@ def main():
             sys.exit(1)
         base_image = Path(args.base_image)
         if not base_image.is_file() or not base_image.exists():
-            raise ValueError(f"base image '%s' must be a file and must exist")
+            raise ValueError(f"base image '{base_image}' must be a file and must exist")
 
         create_volume(vg_name=args.vg_name, vol_name=args.vol_name, base_image=args.base_image, impl=impl, prompt=prompt, vol_size=args.vol_size, domain_name=args.domain_name, force_recreate=args.force_recreate)
 
