@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+THEME="$1"
+
+set -eu
+
+if [ -z "${THEME}" ]; then
+    echo "no theme provided"
+    exit 1
+fi
+
+if [ "${THEME}" = "light" ]; then
+  THEME="Everforest Light Hard"
+else
+  THEME="Everforest Dark Hard"
+fi
+
+kitty +kitten themes --reload-in=all "${THEME}"
