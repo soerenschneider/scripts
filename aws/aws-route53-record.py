@@ -13,9 +13,14 @@ import boto3
 def get_hosted_zone_id(route53: boto3.client, hostname: str) -> Optional[str]:
     response = route53.list_hosted_zones()
 
+    matching_zones = []
     for zone in response['HostedZones']:
         if hostname.endswith(zone['Name'][:-1]):
-            return zone['Id']
+            matching_zones.append(zone)
+
+    if matching_zones:
+        matching_zones.sort(key=lambda zone: len(zone['Name']), reverse=True)
+        return matching_zones[0]['Id']
 
     return None
 
