@@ -25,14 +25,19 @@ def get_hosted_zone_id(route53: boto3.client, hostname: str) -> Optional[str]:
     return None
 
 
-def get_change_batch(hostname: str, ip_address: ipaddress.IPv4Address | ipaddress.IPv6Address, action: str = None, ttl: int = None, record_type: str = None) -> dict:
+def get_change_batch(hostname: str, ip_address: str, action: str = None, ttl: int = None, record_type: str = None) -> dict:
     if not action:
         action = "UPSERT"
 
     if not ttl or ttl < 60:
         ttl = 300
 
-    if record_type:
+    try:
+        ip_address = ipaddress.ip_address(ip_address)
+    except ipaddress.AddressValueError:
+        logging.info("Could not parse '%s' as ip address", ip_address)
+
+    if record_type and record_type.lower() in ["aaaa", "a"]:
         if isinstance(ip_address, ipaddress.IPv4Address) and record_type.lower() == "aaaa":
             raise ValueError("you supplied an ipv4 address and record_type AAAA")
         elif isinstance(ip_address, ipaddress.IPv6Address) and record_type.lower() == "a":
@@ -45,6 +50,9 @@ def get_change_batch(hostname: str, ip_address: ipaddress.IPv4Address | ipaddres
         elif isinstance(ip_address, ipaddress.IPv6Address):
             logging.info("Automatically setting record_type=AAAA for supplied IPv6 (%s)", ip_address)
             record_type = "AAAA"
+
+    if not record_type:
+        raise ValueError("could not automatically detect ip address")
 
     # Create a new DNS record for the hostname with the provided TTL and type
     return {
@@ -69,27 +77,24 @@ def main():
     parser.add_argument("action", choices=["upsert", "delete"], help="Choose 'upsert' to update/insert or 'delete' to delete the DNS record.")
     parser.add_argument("hostname", type=str, help="The hostname you want to set.")
     parser.add_argument("ip_address", type=str, help="The IP address to associate with the hostname.")
+    parser.add_argument("--hosted-zone", type=str, help="The hosted_zone id")
+
     parser.add_argument("--ttl", type=int, default=300, help="Optional TTL for the new DNS record (default is 300).")
     parser.add_argument("--type", type=str, help="Optional type for the new DNS record.")
     args = parser.parse_args()
 
-    try:
-        # Validate the supplied IP address
-        ip = ipaddress.ip_address(args.ip_address)
-    except ipaddress.AddressValueError:
-        logging.error("Error: Invalid IP address format")
-        sys.exit(1)
-
     route53 = boto3.client('route53')
 
     # Get the Route53 hosted zone ID dynamically based on the hostname
-    zone_id = get_hosted_zone_id(route53, args.hostname)
+    zone_id = args.hosted_zone
     if not zone_id:
-        logging.error("No hosted_zone not found for hostname '%s'", args.hostname)
-        sys.exit(1)
+        zone_id = get_hosted_zone_id(route53, args.hostname)
+        if not zone_id:
+            logging.error("No hosted_zone not found for hostname '%s'", args.hostname)
+            sys.exit(1)
 
     logging.info("Found hosted_zone '%s' for hostname '%s'", zone_id, args.hostname)
-    change_batch = get_change_batch(args.hostname, ip, args.action, args.ttl, args.type)
+    change_batch = get_change_batch(args.hostname, args.ip_address, args.action, args.ttl, args.type)
     route53.change_resource_record_sets(HostedZoneId=zone_id, ChangeBatch=change_batch)
     logging.info("Hostname '%s' %sed successfully in hosted zone %s", args.hostname, args.action, zone_id)
 
