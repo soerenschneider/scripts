@@ -3,7 +3,7 @@ pyyaml==6.0.1
 lineinfile==0.4.0
 
 # aws
-boto3==1.28.62
+boto3==1.28.63
 
 # circadian
 suntime==1.2.5
