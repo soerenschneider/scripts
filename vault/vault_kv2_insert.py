@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 
-def parse_args() -> None:
+def parse_args() -> argparse.Namespace:
     args = argparse.ArgumentParser(description="vault - feed me secrets")
     args.add_argument("--mount", "-m", type=str, default="/secret")
     args.add_argument("--secret-key", "-k", type=str, default="value")
