@@ -98,8 +98,7 @@ class PostgresDbBackup(BackupImpl):
         gzip_cmd = ["gzip", "--rsyncable"]
         p2 = subprocess.Popen(gzip_cmd, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        backup_date = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
-        restic_cmd = ["restic", "--json", "backup", "--stdin", "--stdin-filename", f"database_dump-{backup_date}.sql"]
+        restic_cmd = ["restic", "--json", "backup", "--stdin", "--stdin-filename", "database_dump.sql"]
         p3 = subprocess.Popen(restic_cmd, stdin=p2.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         stdout, stderr = p3.communicate()
@@ -135,8 +134,7 @@ class MariaDbBackup(BackupImpl):
             mysql_dump_cmd = ["docker", "exec", self._container_name, "mysqldump", "-u", self._user, f"-p{self._password}", "--all-databases" ]
 
         p1 = subprocess.Popen(mysql_dump_cmd, stdout=subprocess.PIPE)
-        backup_date = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
-        restic_cmd = ["restic", "--json", "backup", "--stdin", "--stdin-filename", f"database_dump-{backup_date}.sql"]
+        restic_cmd = ["restic", "--json", "backup", "--stdin", "--stdin-filename", "database_dump.sql"]
         p2 = subprocess.Popen(restic_cmd, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         stdout, stderr = p2.communicate()
