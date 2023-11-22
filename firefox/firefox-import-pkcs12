@@ -1,7 +1,10 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
-sudo openssl pkcs12 -export -inkey /etc/vault-machine-*.soeren.cloud.key -in /etc/vault-machine-*.soeren.cloud.crt -out ~/shred.p12
-sudo chown soeren:soeren ~/shred.p12
+CRT_FILE=${1:-/etc/vault-machine-*.soeren.cloud.krt}
+KEY_FILE=${2:-/etc/vault-machine-*.soeren.cloud.key}
+
+openssl pkcs12 -export -inkey "${KEY_FILE}" -in "${CRT_FILE}" -out ~/shred.p12
+chown $(whoami)  ~/shred.p12
 pk12util -d ~/.mozilla/firefox/*.default-release -i ~/shred.p12
 shred -u ~/shred.p12
 
