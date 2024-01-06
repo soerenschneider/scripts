@@ -70,21 +70,7 @@ def get_change_batch(hostname: str, ip_address: str, action: str = None, ttl: in
     }
 
 
-def main():
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
-
-    parser = argparse.ArgumentParser(description="Set resource records via Route53.")
-    parser.add_argument("action", choices=["upsert", "delete"], help="Choose 'upsert' to update/insert or 'delete' to delete the DNS record.")
-    parser.add_argument("hostname", type=str, help="The hostname you want to set.")
-    parser.add_argument("ip_address", type=str, help="The IP address to associate with the hostname.")
-    parser.add_argument("--hosted-zone", type=str, help="The hosted_zone id")
-
-    parser.add_argument("--ttl", type=int, default=300, help="Optional TTL for the new DNS record (default is 300).")
-    parser.add_argument("--type", type=str, help="Optional type for the new DNS record.")
-    args = parser.parse_args()
-
-    route53 = boto3.client('route53')
-
+def main(route53: boto3.client, args: argparse.Namespace) -> None:
     # Get the Route53 hosted zone ID dynamically based on the hostname
     zone_id = args.hosted_zone
     if not zone_id:
@@ -100,4 +86,17 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
+
+    parser = argparse.ArgumentParser(description="Set resource records via Route53.")
+    parser.add_argument("action", choices=["upsert", "delete"], help="Choose 'upsert' to update/insert or 'delete' to delete the DNS record.")
+    parser.add_argument("hostname", type=str, help="The hostname you want to set.")
+    parser.add_argument("ip_address", type=str, help="The IP address to associate with the hostname.")
+    parser.add_argument("--hosted-zone", type=str, help="The hosted_zone id")
+
+    parser.add_argument("--ttl", type=int, default=300, help="Optional TTL for the new DNS record (default is 300).")
+    parser.add_argument("--type", type=str, help="Optional type for the new DNS record.")
+    args = parser.parse_args()
+    route53 = boto3.client('route53')
+
+    main(route53, args)
