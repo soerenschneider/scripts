@@ -12,7 +12,9 @@ import subprocess
 
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
+
+import requests
 
 # time to wait for the backup process to finish until cancelling it
 BACKUP_TIMEOUT_SECONDS = 7200
@@ -34,6 +36,10 @@ INTERNAL_METRICS = {
 ENV_PRUNE_KEEP_DAYS = "RETENTION_DAYS"
 ENV_PRUNE_KEEP_WEEKS = "RETENTION_WEEKS"
 ENV_PRUNE_KEEP_MONTHS = "RETENTION_MONTHS"
+ENV_PUSHGATEWAY_URL = "PUSHGATEWAY_URL"
+ENV_METRIC_LABELS = "METRIC_LABELS"
+
+DEFAULT_JOB_NAME = "restic-prune"
 
 
 class ResticError(Exception):
@@ -69,8 +75,22 @@ def run_prune(repo: str, days=None, weeks=None, months=None) -> Optional[str]:
         return stdout.splitlines()[-1]
 
 
+def push_metrics(pushgateway_url: str, metric_data: io.StringIO, backup_id: str = None) -> None:
+    if not backup_id:
+        backup_id = DEFAULT_JOB_NAME
+
+    api_endpoint = f"{pushgateway_url}/metrics/job/restic_prune/instance/{backup_id}"
+    data = metric_data.getvalue()
+    response = requests.post(api_endpoint, data=data, timeout=30)
+    if response.status_code != 200:
+        logging.error("error sending metrics: %s", response.text)
+    response.raise_for_status()
+    logging.info("Successfully pushed metrics to pushgateway %s", pushgateway_url)
+
+
 def write_metrics(metrics_data: io.StringIO, target_dir: Path, backup_id: str) -> None:
     """ Writes the metrics file to the target directory. """
+    backup_id = re.sub(r"[^\w\s]", "", backup_id)
     target_file = f"{METRIC_PREFIX}_{backup_id}.prom"
     tmp_file = f"{target_file}.{os.getpid()}"
     try:
@@ -86,23 +106,6 @@ def write_metrics(metrics_data: io.StringIO, target_dir: Path, backup_id: str) -
 def format_data(output: dict, identifier: str, success: bool, start_time: datetime) -> io.StringIO:
     """ Poor man's Open Metrics formatting of the JSON output. """
     buffer = io.StringIO()
-
-    buffer.write(f'# HELP {METRIC_PREFIX}_deletions_total Total amount of files deleted for a given path\n')
-    buffer.write(f"# TYPE {METRIC_PREFIX}_deletions_total gauge\n")
-    buffer.write(f'# HELP {METRIC_PREFIX}_keep_total Total amount of files deleted for a given path\n')
-    buffer.write(f"# TYPE {METRIC_PREFIX}_keep_total gauge\n")
-    for line in output:
-        removed = 0
-        if line['remove']:
-            removed += len(line['remove'])
-
-        keep = 0
-        if line['keep']:
-            keep += len(line['keep'])
-
-        path = line['paths'][0]
-        buffer.write(f'{METRIC_PREFIX}_deletions_total{{repo="{identifier}",path="{path}"}} {removed}\n')
-        buffer.write(f'{METRIC_PREFIX}_keep_total{{repo="{identifier}",path="{path}"}} {keep}\n')
 
     buffer.write(f'# HELP {METRIC_PREFIX}_success_bool Success of the prune call\n')
     buffer.write(f'# TYPE {METRIC_PREFIX}_success_bool gauge\n')
@@ -130,10 +133,9 @@ def validate_args(args: argparse.Namespace) -> None:
     # check backup id
     if not args.backup_id:
         raise ValueError("No backup_id given")
-    args.backup_id = re.sub(r"[^\w\s]", "", args.backup_id)
 
     # check metric dir
-    if not Path(args.metric_dir).exists():
+    if not args.pushgateway_url and not Path(args.metric_dir).exists():
         raise ValueError(f"Dir to write metrics to does not exist: '{args.metric_dir}' ")
 
     if not args.daily and not args.weekly and not args.monthly:
@@ -146,9 +148,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-r", "--repo", default=os.environ.get("RESTIC_REPOSITORY"), help="The restic repository")
     parser.add_argument("-d", "--daily", default=os.environ.get(ENV_PRUNE_KEEP_DAYS), help="The amount of daily backups to keep")
     parser.add_argument("-w", "--weekly", default=os.environ.get(ENV_PRUNE_KEEP_WEEKS), help="The amount of weekly backups to keep")
-    parser.add_argument("-M", "--monthly", default=os.environ.get(ENV_PRUNE_KEEP_MONTHS), help="The amount of monthly backups to keep")
+    parser.add_argument("-m", "--monthly", default=os.environ.get(ENV_PRUNE_KEEP_MONTHS), help="The amount of monthly backups to keep")
     parser.add_argument("-i", "--id", dest="backup_id", default=os.environ.get("RESTIC_BACKUP_ID"), help="An identifier for this backup")
-    parser.add_argument("-m", "--metric-dir", default="/var/lib/node_exporter", help="Dir to write metrics to")
+    parser.add_argument("-M", "--metric-dir", default="/var/lib/node_exporter", help="Dir to write metrics to")
+    parser.add_argument("-p", "--pushgateway-url", default=os.environ.get(ENV_PUSHGATEWAY_URL), help="Prometheus Pushgateway URL to send metrics to")
+    parser.add_argument("-l", "--metric-labels", default=os.environ.get(ENV_METRIC_LABELS), help="Label(s) to add to metrics. Separate with '{ARG_SPLIT_TOKEN}'")
     return parser.parse_args()
 
 
@@ -170,9 +174,18 @@ def main() -> None:
     except ResticError as err:
         logging.error("Failed to run prune: %s", err)
 
-    formatted = format_data(json_output, args.backup_id, success, start_time)
-    target_dir = Path(args.metric_dir)
-    write_metrics(formatted, target_dir, args.backup_id)
+    metrics_data = format_data(json_output, args.backup_id, success, start_time)
+    pushgateway_success = False
+    if args.pushgateway_url:
+        try:
+            push_metrics(args.pushgateway_url, metrics_data, args.backup_id)
+            pushgateway_success = True
+        except requests.exceptions.HTTPError as e:
+            logging.error(f"Could not push metrics to pushgateway {args.pushgateway_url}: %s", e)
+
+    if not args.pushgateway_url or not pushgateway_success:
+        target_dir = Path(args.metric_dir)
+        write_metrics(metrics_data, target_dir, args.backup_id)
 
     if not success:
         sys.exit(1)

@@ -9,12 +9,13 @@ import re
 import sys
 import shutil
 import subprocess
-import typing
 
 from abc import ABC
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
+
+import requests
 
 # env var keys
 ENV_RESTIC_TARGETS = "RESTIC_TARGETS"
@@ -23,17 +24,23 @@ ENV_RESTIC_REPOSITORY = "RESTIC_REPOSITORY"
 ENV_RESTIC_BACKUP_ID = "RESTIC_BACKUP_ID"
 ENV_RESTIC_EXCLUDE_ITEMS = "RESTIC_EXCLUDE_ITEMS"
 ENV_RESTIC_TYPE = "_RESTIC_TYPE"
+ENV_RESTIC_HOSTNAME = "RESTIC_HOSTNAME"
+ENV_PUSHGATEWAY_URL = "PUSHGATEWAY_URL"
+ENV_METRIC_LABELS = "METRIC_LABELS"
 ENV_MARIADB_CONTAINER_NAME = "MARIADB_CONTAINER_NAME"
 ENV_MARIADB_PASSWORD = "MARIADB_PASSWORD"
 ENV_MARIADB_USER = "MARIADB_USER"
 ENV_POSTGRES_CONTAINER_NAME = "POSTGRES_CONTAINER_NAME"
 ENV_POSTGRES_PASSWORD = "POSTGRES_PASSWORD"
+ENV_POSTGRES_HOST = "POSTGRES_HOST"
 ENV_POSTGRES_USER = "POSTGRES_USER"
 
-ARG_SPLIT_TOKEN=","
+ARG_SPLIT_TOKEN = ","
 
 # time to wait for the backup process to finish until cancelling it
 BACKUP_TIMEOUT_SECONDS = 7200
+
+DEFAULT_JOB_NAME = "restic-backup"
 
 # prefix for all the metrics we're writing
 METRIC_PREFIX = "restic_backup"
@@ -72,7 +79,13 @@ class BackupImpl(ABC):
 
 
 class PostgresDbBackup(BackupImpl):
-    def __init__(self, user=None, password=None, container_name=None):
+    def __init__(self,
+                 user: str = None,
+                 password: str = None,
+                 postgres_host: str = None,
+                 hostname: str = None,
+                 container_name: str = None):
+
         if not user:
             self._user = os.getenv(ENV_POSTGRES_USER)
         else:
@@ -83,13 +96,26 @@ class PostgresDbBackup(BackupImpl):
         else:
             self._password = password
 
+        if not postgres_host:
+            self._postgres_host = os.getenv(ENV_POSTGRES_HOST)
+        else:
+            self._postgres_host = postgres_host
+
+        if not hostname:
+            self._hostname = os.getenv(ENV_RESTIC_HOSTNAME)
+        else:
+            self._hostname = hostname
+
         if not container_name:
             self._container_name = os.getenv(ENV_POSTGRES_CONTAINER_NAME)
         else:
             self._container_name = container_name
 
     def run_backup(self) -> Optional[List[bytes]]:
-        pg_dump_cmd = ["pg_dumpall", "--clean", f"-U{self._user}"]
+        pg_dump_cmd = ["pg_dumpall", "--clean", f"--username={self._user}"]
+        if self._postgres_host:
+            pg_dump_cmd.append(f"--host={self._postgres_host}")
+
         if self._container_name:
             pg_dump_cmd = ["docker", "exec", self._container_name] + pg_dump_cmd
 
@@ -98,7 +124,11 @@ class PostgresDbBackup(BackupImpl):
         gzip_cmd = ["gzip", "--rsyncable"]
         p2 = subprocess.Popen(gzip_cmd, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        restic_cmd = ["restic", "--json", "backup", "--stdin", "--stdin-filename", "database_dump.sql"]
+        restic_cmd = ["restic", "--json", "backup", "--stdin", "--stdin-filename"]
+        if self._hostname:
+            restic_cmd.append(f"--host={self._hostname}")
+        restic_cmd.append("database_dump.sql")
+
         p3 = subprocess.Popen(restic_cmd, stdin=p2.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         stdout, stderr = p3.communicate()
@@ -112,7 +142,11 @@ class PostgresDbBackup(BackupImpl):
 
 
 class MariaDbBackup(BackupImpl):
-    def __init__(self, user=None, password=None, container_name=None):
+    def __init__(self,
+                 user: str = None,
+                 password: str = None,
+                 hostname: str = None,
+                 container_name: str = None):
         if not user:
             self._user = os.getenv(ENV_MARIADB_USER)
         else:
@@ -123,6 +157,11 @@ class MariaDbBackup(BackupImpl):
         else:
             self._password = password
 
+        if not hostname:
+            self._hostname = os.getenv(ENV_RESTIC_HOSTNAME)
+        else:
+            self._hostname = hostname
+
         if not container_name:
             self._container_name = os.getenv(ENV_MARIADB_CONTAINER_NAME)
         else:
@@ -131,10 +170,21 @@ class MariaDbBackup(BackupImpl):
     def run_backup(self) -> Optional[List[bytes]]:
         mysql_dump_cmd = ["mysqldump", "-u", self._user, f"-p{self._password}", "--all-databases" ]
         if self._container_name:
-            mysql_dump_cmd = ["docker", "exec", self._container_name, "mysqldump", "-u", self._user, f"-p{self._password}", "--all-databases" ]
+            mysql_dump_cmd = ["docker",
+                              "exec",
+                              self._container_name,
+                              "mysqldump",
+                              "-u",
+                              self._user,
+                              f"-p{self._password}",
+                              "--all-databases"]
 
         p1 = subprocess.Popen(mysql_dump_cmd, stdout=subprocess.PIPE)
-        restic_cmd = ["restic", "--json", "backup", "--stdin", "--stdin-filename", "database_dump.sql"]
+        restic_cmd = ["restic", "--json", "backup", "--stdin", "--stdin-filename"]
+        if self._hostname:
+            restic_cmd.append(f"--host={self._hostname}")
+        restic_cmd.append("database_dump.sql")
+
         p2 = subprocess.Popen(restic_cmd, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         stdout, stderr = p2.communicate()
@@ -147,7 +197,12 @@ class MariaDbBackup(BackupImpl):
 
 
 class DirectoryBackup(BackupImpl):
-    def __init__(self, repo: str, dirs: str, exclude_file: str = None, exclude_items: str = None):
+    def __init__(self,
+                 repo: str,
+                 dirs: str,
+                 exclude_file: str = None,
+                 exclude_items: str = None,
+                 hostname: str = None):
         if not repo:
             raise ValueError("no repo provided")
 
@@ -171,6 +226,11 @@ class DirectoryBackup(BackupImpl):
         else:
             self._exclude_items = []
 
+        if not hostname:
+            self._hostname = os.getenv(ENV_RESTIC_HOSTNAME)
+        else:
+            self._hostname = hostname
+
     def run_backup(self) -> Optional[List[bytes]]:
         """ Performs the backup operation. Returns the JSONified stdout of the restic backup call. """
         # skeleton of the backup cmd we're invoking
@@ -181,6 +241,9 @@ class DirectoryBackup(BackupImpl):
         if self._exclude_items:
             for item in self._exclude_items:
                 restic_base_cmd += [f"--exclude={item}"]
+
+        if self._hostname:
+            restic_base_cmd.append(f"--host={self._hostname}")
 
         command = restic_base_cmd + ["-r", self._repo] + self._dirs
         logging.info("Starting backup using command: %s", command)
@@ -195,8 +258,41 @@ class DirectoryBackup(BackupImpl):
             return stdout.splitlines()[-1]
 
 
+def restic_upsert_repo():
+    if not restic_repo_exists():
+        restic_init_repo()
+
+
+def restic_repo_exists() -> bool:
+    command = ["restic", "snapshots", "--json"]
+    logging.info("Checking for existing snapshots")
+    with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
+        _, stderr = proc.communicate()
+        proc.wait(BACKUP_TIMEOUT_SECONDS)
+        if proc.returncode != 0:
+            logging.error("Listing snapshots was not successful, this can either indicate the repository does not exist yet OR there's a problem accessing the repository (server error, credentials, etc.): %s", stderr)
+            return False
+
+        logging.info("Repository exists")
+        return True
+
+
+def restic_init_repo() -> bool:
+    command = ["restic", "init"]
+    logging.info("Trying to initialize repo")
+    with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
+        stdout, stderr = proc.communicate()
+        proc.wait(BACKUP_TIMEOUT_SECONDS)
+        if proc.returncode != 0:
+            logging.error("Initiliazing repo not successful: %s", stderr)
+            return False
+
+        return True
+
+
 def write_metrics(metrics_data: io.StringIO, target_dir: Path, backup_id: str) -> None:
     """ Writes the metrics file to the target directory. """
+    backup_id = re.sub(r"[^\w\s]", "", backup_id)
     target_file = f"{METRIC_PREFIX}_{backup_id}.prom"
     tmp_file = f"{target_file}.{os.getpid()}"
     try:
@@ -209,8 +305,35 @@ def write_metrics(metrics_data: io.StringIO, target_dir: Path, backup_id: str) -
         metrics_data.close()
 
 
-def format_data(output: dict, identifier: str) -> io.StringIO:
+def push_metrics(pushgateway_url: str, metric_data: io.StringIO, backup_id: str = None) -> None:
+    if not backup_id:
+        backup_id = DEFAULT_JOB_NAME
+
+    api_endpoint = f"{pushgateway_url}/metrics/job/restic_backup/instance/{backup_id}"
+    data = metric_data.getvalue()
+    response = requests.post(api_endpoint, data=data, timeout=30)
+    response.raise_for_status()
+    logging.info("Successfully pushed metrics to pushgateway %s", pushgateway_url)
+
+
+def _format_labels(input_string: str) -> str:
+    if not input_string:
+        return ""
+
+    key_value_pairs = input_string.split(',')
+    formatted_pairs = [f'{pair.split("=")[0]}="{pair.split("=")[1]}"' for pair in key_value_pairs]
+    formatted_string = ','.join(formatted_pairs)
+    return formatted_string
+
+
+def format_data(output: dict, identifier: str, metric_labels: str = None) -> io.StringIO:
     """ Poor man's Open Metrics formatting of the JSON output. """
+    additional_labels = _format_labels(metric_labels)
+    if additional_labels == "":
+        labels = f'{{repo="{identifier}"}}'
+    else:
+        labels = f'{{repo="{identifier},{additional_labels}"}}'
+
     buffer = io.StringIO()
     for metric in RESTIC_METRICS:
         if metric not in output:
@@ -220,13 +343,13 @@ def format_data(output: dict, identifier: str) -> io.StringIO:
             value = output[metric]
             buffer.write(f"# HELP {METRIC_PREFIX}_{metric}{RESTIC_METRICS[metric][0]} {RESTIC_METRICS[metric][1]}\n")
             buffer.write(f"# TYPE {METRIC_PREFIX}_{metric}{RESTIC_METRICS[metric][0]} gauge\n")
-            buffer.write(f'{METRIC_PREFIX}_{metric}{RESTIC_METRICS[metric][0]}{{repo="{identifier}"}} {value}\n')
+            buffer.write(f'{METRIC_PREFIX}_{metric}{RESTIC_METRICS[metric][0]}{labels} {value}\n')
 
     for metric in INTERNAL_METRICS:
         value = output[metric]
         buffer.write(f"# HELP {METRIC_PREFIX}_{metric}{INTERNAL_METRICS[metric][0]} {INTERNAL_METRICS[metric][1]}\n")
         buffer.write(f"# TYPE {METRIC_PREFIX}_{metric}{INTERNAL_METRICS[metric][0]} gauge\n")
-        buffer.write(f'{METRIC_PREFIX}_{metric}{INTERNAL_METRICS[metric][0]}{{repo="{identifier}"}} {value}\n')
+        buffer.write(f'{METRIC_PREFIX}_{metric}{INTERNAL_METRICS[metric][0]}{labels} {value}\n')
 
     return buffer
 
@@ -242,10 +365,8 @@ def validate_args(args: argparse.Namespace) -> None:
     # check backup id
     if not args.backup_id:
         raise ValueError("No backup_id given")
-    args.backup_id = re.sub(r"[^\w\s]", "", args.backup_id)
 
-    # check metric dir
-    if not Path(args.metric_dir).exists():
+    if not args.pushgateway_url and not Path(args.metric_dir).exists():
         raise ValueError(f"Dir to write metrics to does not exist: '{args.metric_dir}' ")
 
 
@@ -256,9 +377,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--targets", default=os.environ.get(ENV_RESTIC_TARGETS), help=f"The targets to include in the snapshot. Provide as a single string, separated by '{ARG_SPLIT_TOKEN}'")
     parser.add_argument("-t", "--type", default=os.environ.get(ENV_RESTIC_TYPE), help="The type defines what exactly to backup")
     parser.add_argument("-i", "--id", dest="backup_id", default=os.environ.get(ENV_RESTIC_BACKUP_ID), help="An identifier for this backup")
-    parser.add_argument("-m", "--metric-dir", default="/var/lib/node_exporter", help="Dir to write metrics to")
+    parser.add_argument("-h", "--hostname", default=os.environ.get(ENV_RESTIC_HOSTNAME), help="Set the hostname for restic. This is useful if run in docker machines.")
     parser.add_argument("-e", "--exclude-items", default=os.environ.get(ENV_RESTIC_EXCLUDE_ITEMS), help=f"Item(s) to exclude from backup. Separate with '{ARG_SPLIT_TOKEN}'")
     parser.add_argument("-ef", "--exclude-file", default=os.environ.get(ENV_RESTIC_EXCLUDE_FILE), help="Path to file containing exclude patterns")
+
+    parser.add_argument("-d", "--metric-dir", default="/var/lib/node_exporter", help="Dir to write metrics to")
+    parser.add_argument("-p", "--pushgateway-url", default=os.environ.get(ENV_PUSHGATEWAY_URL), help="Prometheus Pushgateway URL to send metrics to")
+    parser.add_argument("-l", "--metric-labels", default=os.environ.get(ENV_METRIC_LABELS), help="Label(s) to add to metrics. Separate with '{ARG_SPLIT_TOKEN}'")
+
     return parser.parse_args()
 
 
@@ -273,7 +399,11 @@ def get_backup_impl(args: argparse.Namespace) -> BackupImpl:
 
     if args.type.lower() == "directory":
         logging.info("Using 'directory' backup impl")
-        return DirectoryBackup(repo=args.repo, dirs=args.targets, exclude_file=args.exclude_file, exclude_items=args.exclude_items)
+        return DirectoryBackup(repo=args.repo,
+                               dirs=args.targets,
+                               exclude_file=args.exclude_file,
+                               exclude_items=args.exclude_items,
+                               hostname=args.hostname)
 
     if args.type.lower() == "mariadb":
         logging.info("Using 'mariadb' backup impl")
@@ -291,11 +421,15 @@ def main() -> None:
     impl = get_backup_impl(args)
     try:
         validate_args(args)
+        restic_upsert_repo()
         stdout = impl.run_backup()
         json_output = json.loads(stdout)
         success = True
     except NameError as err:
         logging.error("Can not start the backup: %s", err.args[0])
+        sys.exit(1)
+    except ValueError as err:
+        logging.error("Wrong configuration: %s", err)
         sys.exit(1)
     except ResticError as err:
         logging.error("Failed to run backup: %s", err)
@@ -305,14 +439,23 @@ def main() -> None:
     json_output["exporter_errors"] = 0
     json_output["start_time"] = start_time
 
-    metrics_data = format_data(json_output, args.backup_id)
-    target_dir = Path(args.metric_dir)
-    write_metrics(metrics_data, target_dir, args.backup_id)
+    metrics_data = format_data(json_output, args.backup_id, args.metric_labels)
+    pushgateway_success = False
+    if args.pushgateway_url:
+        try:
+            push_metrics(args.pushgateway_url, metrics_data)
+            pushgateway_success = True
+        except requests.exceptions.HTTPError as e:
+            logging.error(f"Could not push metrics to pushgateway {args.pushgateway_url}: %s", e)
+
+    if not args.pushgateway_url or not pushgateway_success:
+        target_dir = Path(args.metric_dir)
+        write_metrics(metrics_data, target_dir, args.backup_id)
 
     if not success:
         sys.exit(1)
 
 
 if __name__ == "__main__":
-    logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.INFO)
+    logging.basicConfig(format="%(asctime)-15s %(levelname)-8s %(message)s", level=logging.INFO)
     main()
