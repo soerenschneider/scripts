@@ -124,10 +124,10 @@ class PostgresDbBackup(BackupImpl):
         gzip_cmd = ["gzip", "--rsyncable"]
         p2 = subprocess.Popen(gzip_cmd, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        restic_cmd = ["restic", "--json", "backup", "--stdin", "--stdin-filename"]
+        restic_cmd = ["restic", "--json"]
         if self._hostname:
             restic_cmd.append(f"--host={self._hostname}")
-        restic_cmd.append("database_dump.sql")
+        restic_cmd += ["backup", "--stdin", "--stdin-filename", "database_dump.sql"]
 
         p3 = subprocess.Popen(restic_cmd, stdin=p2.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -377,7 +377,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--targets", default=os.environ.get(ENV_RESTIC_TARGETS), help=f"The targets to include in the snapshot. Provide as a single string, separated by '{ARG_SPLIT_TOKEN}'")
     parser.add_argument("-t", "--type", default=os.environ.get(ENV_RESTIC_TYPE), help="The type defines what exactly to backup")
     parser.add_argument("-i", "--id", dest="backup_id", default=os.environ.get(ENV_RESTIC_BACKUP_ID), help="An identifier for this backup")
-    parser.add_argument("-h", "--hostname", default=os.environ.get(ENV_RESTIC_HOSTNAME), help="Set the hostname for restic. This is useful if run in docker machines.")
+    parser.add_argument("--hostname", default=os.environ.get(ENV_RESTIC_HOSTNAME), help="Set the hostname for restic. This is useful if run in docker machines.")
     parser.add_argument("-e", "--exclude-items", default=os.environ.get(ENV_RESTIC_EXCLUDE_ITEMS), help=f"Item(s) to exclude from backup. Separate with '{ARG_SPLIT_TOKEN}'")
     parser.add_argument("-ef", "--exclude-file", default=os.environ.get(ENV_RESTIC_EXCLUDE_FILE), help="Path to file containing exclude patterns")
 
