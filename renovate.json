@@ -1,3 +1,36 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json"
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base",
+    ":rebaseStalePrs",
+    ":semanticCommits",
+    ":semanticCommitTypeAll(fix)"
+  ],
+  "ansible": {
+    "fileMatch": [
+      "(^|/)tasks/[^/]+\\.ya?ml$",
+      "(^|/)playbook.ya?ml$"
+    ]
+  },
+  "packageRules": [
+    {
+      "matchDatasources": ["docker"],
+      "updateTypes": [
+        "minor",
+        "patch"
+      ]
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": [
+        "(^|/|\\.)([Dd]ocker|[Cc]ontainer)file$",
+        "(^|/)([Dd]ocker|[Cc]ontainer)file[^/]*$"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-.]+?) depName=(?<depName>[^\\s]+?)(?: (lookupName|packageName)=(?<packageName>[^\\s]+?))?(?: versioning=(?<versioning>[^\\s]+?))?(?: extractVersion=(?<extractVersion>[^\\s]+?))?(?: registryUrl=(?<registryUrl>[^\\s]+?))?\\s(?:ENV|ARG) .+?_VERSION[ =]\"?(?<currentValue>.+?)\"?\\s"
+      ]
+    }
+  ]
 }
