@@ -1,8 +1,8 @@
 FROM golang:1.21.5 AS restic-builder
 
 # renovate: datasource=github-releases depName=restic/restic
-ARG restic_version=v0.16.2
-RUN go install github.com/restic/restic/cmd/restic@${restic_version}
+ARG RESTIC_VERSION=v0.16.2
+RUN go install github.com/restic/restic/cmd/restic@${RESTIC_VERSION}
 
 FROM postgres:16.2
 
