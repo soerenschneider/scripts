@@ -4,7 +4,7 @@ FROM golang:1.21.5 AS restic-builder
 ARG restic_version=v0.16.2
 RUN go install github.com/restic/restic/cmd/restic@${restic_version}
 
-FROM postgres:16.1
+FROM postgres:16.2
 
 RUN apt update && apt -y install python3 python3-pip && rm -rf /var/lib/apt/lists/*
 
