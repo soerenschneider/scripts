@@ -1,10 +1,10 @@
-FROM golang:1.21.5 AS restic-builder
+FROM golang:1.22.0 AS restic-builder
 
 # renovate: datasource=github-releases depName=restic/restic
-ARG restic_version=v0.16.2
-RUN go install github.com/restic/restic/cmd/restic@${restic_version}
+ARG RESTIC_VERSION=v0.16.4
+RUN go install github.com/restic/restic/cmd/restic@${RESTIC_VERSION}
 
-FROM postgres:16.1
+FROM postgres:16.2
 
 RUN apt update && apt -y install python3 python3-pip && rm -rf /var/lib/apt/lists/*
 
