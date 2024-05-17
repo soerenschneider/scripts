@@ -419,8 +419,38 @@ def get_backup_impl(args: argparse.Namespace) -> BackupImpl:
     raise ValueError(f"Unknown backup type '{args.type}'")
 
 
+def _log_backup_data(output: dict):
+    try:
+        humanized = humanize_bytes(output["total_bytes_processed"])
+        logging.info("%d/%d new files/dirs, %d/%d changed files/dirs, processed %s of data", output["files_new"], output["dirs_new"], output["files_changed"], output["dirs_changed"], humanized)
+    except KeyError:
+        logging.warning("Missing restic metric data")
+
+
+def humanize_bytes(num_bytes: int):
+    """ Convert a number of bytes into a human-readable format. """
+    suffixes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+
+    index = 0
+    while num_bytes >= 1024 and index < len(suffixes) - 1:
+        num_bytes /= 1024.0
+        index += 1
+
+    # Format the number to two decimal points
+    return f"{num_bytes:.2f}{suffixes[index]}"
+
+
+def setup_logging(debug=False) -> None:
+    """ Set up the logging configuration. """
+    loglevel = logging.INFO
+    if debug:
+        loglevel = logging.DEBUG
+    logging.basicConfig(level=loglevel, format="%(asctime)s %(levelname)s %(message)s")
+
+
 def main() -> None:
-    """ Main does mainly main things. """
+    """ Runs restic. """
+    setup_logging()
     start_time = datetime.utcnow().timestamp()
     args = parse_args()
     success = False
@@ -461,6 +491,8 @@ def main() -> None:
 
     if not success:
         sys.exit(1)
+
+    _log_backup_data(json_output)
 
 
 if __name__ == "__main__":
