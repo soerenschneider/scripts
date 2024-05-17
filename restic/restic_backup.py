@@ -312,6 +312,7 @@ def write_metrics(metrics_data: io.StringIO, target_dir: Path, backup_id: str) -
 
 
 def push_metrics(pushgateway_url: str, metric_data: io.StringIO, backup_id: str = None) -> None:
+    """ Pushes metrics to Prometheus pushgateway. """
     if not backup_id:
         backup_id = DEFAULT_JOB_NAME
 
