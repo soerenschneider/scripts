@@ -175,16 +175,15 @@ class MariaDbBackup(BackupImpl):
             self._container_name = container_name
 
     def run_backup(self) -> Optional[List[bytes]]:
-        mysql_dump_cmd = ["mysqldump", "-u", self._user, f"-p{self._password}", "--all-databases" ]
+        if not os.getenv("MYSQL_PWD"):
+            os.environ["MYSQL_PWD"] = self._password
+
+        mysql_dump_cmd = ["mysqldump", f"--user={self._user}", "--all-databases"]
+        if self._mariadb_host:
+            mysql_dump_cmd.append(f"--host={self._mariadb_host}")
+
         if self._container_name:
-            mysql_dump_cmd = ["docker",
-                              "exec",
-                              self._container_name,
-                              "mysqldump",
-                              "-u",
-                              self._user,
-                              f"-p{self._password}",
-                              "--all-databases"]
+            mysql_dump_cmd = ["docker", "exec", self._container_name] + mysql_dump_cmd
 
         p1 = subprocess.Popen(mysql_dump_cmd, stdout=subprocess.PIPE)
         restic_cmd = ["restic", "--json", "backup", "--stdin", "--stdin-filename"]
