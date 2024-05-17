@@ -30,6 +30,7 @@ ENV_METRIC_LABELS = "METRIC_LABELS"
 ENV_MARIADB_CONTAINER_NAME = "MARIADB_CONTAINER_NAME"
 ENV_MARIADB_PASSWORD = "MARIADB_PASSWORD"
 ENV_MARIADB_USER = "MARIADB_USER"
+ENV_MARIADB_HOST = "MARIADB_HOST"
 ENV_POSTGRES_CONTAINER_NAME = "POSTGRES_CONTAINER_NAME"
 ENV_POSTGRES_PASSWORD = "POSTGRES_PASSWORD"
 ENV_POSTGRES_HOST = "POSTGRES_HOST"
@@ -143,10 +144,16 @@ class PostgresDbBackup(BackupImpl):
 
 class MariaDbBackup(BackupImpl):
     def __init__(self,
+                 host: str = None,
                  user: str = None,
                  password: str = None,
                  hostname: str = None,
                  container_name: str = None):
+        if not host:
+            self._mariadb_host = os.getenv(ENV_MARIADB_HOST)
+        else:
+            self._mariadb_host = host
+
         if not user:
             self._user = os.getenv(ENV_MARIADB_USER)
         else:
