@@ -1,4 +1,4 @@
-FROM golang:1.22.0 AS restic
+FROM golang:1.22.3 AS restic
 
 # renovate: datasource=github-releases depName=restic/restic
 ARG RESTIC_VERSION=v0.16.4
