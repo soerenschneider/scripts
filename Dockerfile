@@ -1,6 +1,6 @@
 FROM hashicorp/vault:1.16.2 AS donor
 
-FROM python:3.12.3-slim AS final
+FROM python:3.12.4-slim AS final
 
 COPY --from=donor /bin/vault /usr/bin/vault
 
