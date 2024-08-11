@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+set -eu
+
+if [[ ! -f "${ANSIBLE_INVENTORY}" ]]; then
+  echo "Did not find inventory file at ${ANSIBLE_INVENTORY}"
+  exit 1
+fi
+
+echo "Using inventory ${ANSIBLE_INVENTORY}"
+
+INVENTORY_DIR="$(dirname "${ANSIBLE_INVENTORY}")"
+git -C "${INVENTORY_DIR}" fetch origin
+
+local_commit=$(git -C "${INVENTORY_DIR}" rev-parse HEAD)
+remote_commit=$(git -C "${INVENTORY_DIR}" rev-parse origin/main)
+
+if [[ "$local_commit" = "$remote_commit" ]]; then
+  echo "Local repository is up to date (${local_commit})"
+  ansible-playbook -i "${ANSIBLE_INVENTORY}" "$@"
+else
+  echo "Repository is not up to date with the remote."
+  exit 1
+fi
