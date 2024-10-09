@@ -181,6 +181,9 @@ class MariaDbBackup(BackupImpl):
         mysql_dump_cmd = ["mariadb-dump", f"--user={self._user}", "--all-databases"]
         if self._mariadb_host:
             mysql_dump_cmd.append(f"--host={self._mariadb_host}")
+        else:
+            # if we connect to localhost, don't try to verify the tls cert
+            mysql_dump_cmd.append("--ssl-verify-server-cert=false")
 
         if self._container_name:
             mysql_dump_cmd = ["docker", "exec", self._container_name] + mysql_dump_cmd
