@@ -128,7 +128,7 @@ class PostgresDbBackup(BackupImpl):
         restic_cmd = ["restic", "--json"]
         if self._hostname:
             restic_cmd.append(f"--host={self._hostname}")
-        restic_cmd += ["backup", "--stdin", "--stdin-filename", "database_dump.sql", "--compression=max"]
+        restic_cmd += ["backup", "--compression=max", "--stdin", "--stdin-filename", "database_dump.sql"]
 
         p3 = subprocess.Popen(restic_cmd, stdin=p2.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -189,7 +189,7 @@ class MariaDbBackup(BackupImpl):
             mysql_dump_cmd = ["docker", "exec", self._container_name] + mysql_dump_cmd
 
         p1 = subprocess.Popen(mysql_dump_cmd, stdout=subprocess.PIPE)
-        restic_cmd = ["restic", "--json", "backup", "--stdin", "--stdin-filename", "--compression=max"]
+        restic_cmd = ["restic", "--compression=max", "--json", "backup", "--stdin", "--stdin-filename"]
         if self._hostname:
             restic_cmd.append(f"--host={self._hostname}")
         restic_cmd.append("database_dump.sql")
