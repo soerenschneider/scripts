@@ -186,7 +186,7 @@ class MariaDbBackup(BackupImpl):
             mysql_dump_cmd.append("--ssl-verify-server-cert=false")
 
         if self._container_name:
-            mysql_dump_cmd = ["docker", "exec", self._container_name] + mysql_dump_cmd
+            mysql_dump_cmd = ["docker", "exec", f"-e=MYSQL_PWD={self._password}", self._container_name] + mysql_dump_cmd
 
         p1 = subprocess.Popen(mysql_dump_cmd, stdout=subprocess.PIPE)
         restic_cmd = ["restic", "--compression=max", "--json", "backup", "--stdin", "--stdin-filename"]
