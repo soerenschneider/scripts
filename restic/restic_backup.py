@@ -178,7 +178,7 @@ class MariaDbBackup(BackupImpl):
         if not os.getenv("MYSQL_PWD"):
             os.environ["MYSQL_PWD"] = self._password
 
-        mysql_dump_cmd = ["mysqldump", f"--user={self._user}", "--all-databases"]
+        mysql_dump_cmd = ["mariadb-dump", f"--user={self._user}", "--all-databases"]
         if self._mariadb_host:
             mysql_dump_cmd.append(f"--host={self._mariadb_host}")
 
