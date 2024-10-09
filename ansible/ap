@@ -20,5 +20,6 @@ if [[ "$local_commit" = "$remote_commit" ]]; then
   ansible-playbook -i "${ANSIBLE_INVENTORY}" "$@"
 else
   echo "Repository is not up to date with the remote."
+  echo "Local: ${local_commit}, remote: ${remote_commit}"
   exit 1
 fi
