@@ -11,7 +11,7 @@ RUN apt update && \
 WORKDIR /restic
 RUN CGO_ENABLED=0 go run helpers/build-release-binaries/main.go -p linux/amd64 --skip-compress
 
-FROM alpine:3.20.1
+FROM alpine:3.21.2
 
 # renovate: datasource=pip depName=requests
 ARG REQUESTS_VERSION=2.31.0
