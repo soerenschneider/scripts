@@ -128,7 +128,7 @@ class PostgresDbBackup(BackupImpl):
         restic_cmd = ["restic", "--json"]
         if self._hostname:
             restic_cmd.append(f"--host={self._hostname}")
-        restic_cmd += ["backup", "--stdin", "--stdin-filename", "database_dump.sql"]
+        restic_cmd += ["backup", "--compression=max", "--stdin", "--stdin-filename", "database_dump.sql"]
 
         p3 = subprocess.Popen(restic_cmd, stdin=p2.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -178,15 +178,18 @@ class MariaDbBackup(BackupImpl):
         if not os.getenv("MYSQL_PWD"):
             os.environ["MYSQL_PWD"] = self._password
 
-        mysql_dump_cmd = ["mysqldump", f"--user={self._user}", "--all-databases"]
+        mysql_dump_cmd = ["mariadb-dump", f"--user={self._user}", "--all-databases"]
         if self._mariadb_host:
             mysql_dump_cmd.append(f"--host={self._mariadb_host}")
+        else:
+            # if we connect to localhost, don't try to verify the tls cert
+            mysql_dump_cmd.append("--ssl-verify-server-cert=false")
 
         if self._container_name:
-            mysql_dump_cmd = ["docker", "exec", self._container_name] + mysql_dump_cmd
+            mysql_dump_cmd = ["docker", "exec", f"-e=MYSQL_PWD={self._password}", self._container_name] + mysql_dump_cmd
 
         p1 = subprocess.Popen(mysql_dump_cmd, stdout=subprocess.PIPE)
-        restic_cmd = ["restic", "--json", "backup", "--stdin", "--stdin-filename"]
+        restic_cmd = ["restic", "--compression=max", "--json", "backup", "--stdin", "--stdin-filename"]
         if self._hostname:
             restic_cmd.append(f"--host={self._hostname}")
         restic_cmd.append("database_dump.sql")
