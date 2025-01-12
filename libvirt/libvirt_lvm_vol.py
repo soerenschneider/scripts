@@ -7,6 +7,7 @@ import re
 import socket
 import subprocess
 import sys
+import tempfile
 
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -34,7 +35,7 @@ def parse_args() -> argparse.Namespace:
 
     subparsers = parser.add_subparsers(title='Subcommands', dest='subcommand')
     sync = subparsers.add_parser(subcommands["sync"], help='Read information from hosts file and (re-)create volumes')
-    sync.add_argument("--hosts-file", type=str, required=True, help="File or http link to hosts definition file")
+    sync.add_argument("--domains-file", type=str, help="File or http link to domain definition file")
     sync.add_argument("--base-image-dir", "-b", required=True, type=str, default=None, help="Dir containing base images")
     sync.add_argument("--vm-host", type=str, default=None, help="The host name of the host the VMs should be scheduled. Usually this is auto detected.")
 
@@ -234,22 +235,31 @@ def _hostname_without_domain(hostname: str) -> str:
     return hostname
 
 
-def iterate_vms(datacenter: str, vm_host: str, hosts_data: Dict[str, any], args: argparse.Namespace, impl: Calls, prompt: UserInteraction) -> None:
-    if datacenter not in hosts_data['local_hosts']:
-        return
+def fetch_domains_file(host: str):
+    if not host:
+        raise Exception("No host given")
 
-    simple_hostname = _hostname_without_domain(vm_host)
-    for host in hosts_data["local_hosts"][datacenter]:
-        if "vm_config" not in host or host["vm_config"]["host"] not in [simple_hostname, vm_host]:
-            continue
+    url = f"https://raw.githubusercontent.com/soerenschneider/tf-libvirt/refs/heads/master/envs/{host}/domains.yaml"
+    response = requests.get(url)
+    response.raise_for_status()
+    temp_dir = tempfile.gettempdir()
+    file_path = os.path.join(temp_dir, f"domains-{host}.yaml")
+    with open(file_path, "wb") as file:
+        file.write(response.content)
 
-        wanted_os = host["vm_config"]["os"]
+    logging.info(f"Domain definition file downloaded successfully to {file_path}.")
+    return file_path
+
+
+def iterate_vms(domain_data: List[Dict[str, any]], args: argparse.Namespace, impl: Calls, prompt: UserInteraction) -> None:
+    for domain in domain_data:
+        wanted_os = domain["os"]
         base_image = find_baseimage(args.base_image_dir, wanted_os)
         if not base_image:
             logging.error("could not find any images for '%s' in dir '%s'", wanted_os, args.base_image_dir)
             continue
 
-        block_devices = host["vm_config"]["block_devices"]
+        block_devices = domain["block_devices"]
         if not block_devices:
             logging.error("no block devices configured, skipping")
             continue
@@ -259,8 +269,8 @@ def iterate_vms(datacenter: str, vm_host: str, hosts_data: Dict[str, any], args:
             logging.error("no vg_name / vol_name found, skipping")
             continue
 
-        vm_name = host["host"]
-        disk_size = host["vm_config"]["disk_size_b"] / (1024 ** 3)
+        vm_name = domain["name"]
+        disk_size = domain["disk_size_g"]
 
         create_volume(vg_name=vg_name, vol_name=vol_name, base_image=base_image, vol_size=disk_size, domain_name=vm_name, force_recreate=args.force_recreate, impl=impl, prompt=prompt)
 
@@ -275,12 +285,8 @@ def _detect_datacenter(hostname: str) -> Optional[str]:
     return None
 
 
-def _get_hosts_data(hosts_file: str) -> Dict[str, any]:
-    if hosts_file.startswith("http://") or hosts_file.startswith("https://"):
-        data = requests.get(hosts_file, timeout=5)
-        return yaml.safe_load(data)
-
-    with open(hosts_file, 'r', encoding="utf8") as file:
+def _get_hosts_data(domain_data_file: str) -> Dict[str, any]:
+    with open(domain_data_file, 'r', encoding="utf8") as file:
         return yaml.safe_load(file)
 
 
@@ -353,9 +359,12 @@ def main():
         else:
             logging.info("Detected datacenter '%s' from hostname '%s'", datacenter, vm_host)
 
-        hosts_data = _get_hosts_data(args.hosts_file)
-        logging.info("Loaded hosts_data with %d entries for dc %s", len(hosts_data["local_hosts"][datacenter]), datacenter)
-        iterate_vms(datacenter=datacenter, vm_host=vm_host, hosts_data=hosts_data, args=args, impl=impl, prompt=prompt)
+        if not args.domains_file:
+            args.domains_file = fetch_domains_file(vm_host)
+
+        domain_data = _get_hosts_data(args.domains_file)
+        logging.info("Loaded hosts_data with %d entries", len(domain_data))
+        iterate_vms(domain_data=domain_data, args=args, impl=impl, prompt=prompt)
     elif args.subcommand == subcommands["create"]:
         if not impl.vg_exists(args.vg_name):
             logging.error("volume group '%s' does not exist", args.vg_name)
