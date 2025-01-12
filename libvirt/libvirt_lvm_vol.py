@@ -247,7 +247,7 @@ def fetch_domains_file(host: str):
     with open(file_path, "wb") as file:
         file.write(response.content)
 
-    logging.info(f"Domain definition file downloaded successfully to {file_path}.")
+    logging.info(f"Domain definition file downloaded successfully to {file_path}")
     return file_path
 
 
