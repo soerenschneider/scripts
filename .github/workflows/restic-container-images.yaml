@@ -5,8 +5,6 @@ on:
     paths:
       - 'restic/restic**'
       - 'restic/Dockerfile**'
-    branches:
-      - main
     tags:
       - '*'  # Triggers on any new tag
   workflow_dispatch: {}
