@@ -2,11 +2,8 @@
 name: Build & publish restic container images
 on:
   push:
-    paths:
-      - 'restic/restic**'
-      - 'restic/Dockerfile**'
-    tags:
-      - '*'  # Triggers on any new tag
+    branches:
+      - main
   workflow_dispatch: {}
 
 env:
