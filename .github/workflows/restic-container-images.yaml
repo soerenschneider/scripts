@@ -55,8 +55,8 @@ jobs:
         uses: docker/build-push-action@v6.11.0
         with:
           context: .
-          build-args:
-            - POSTGRES_MAJOR=${{ matrix.pg_version }}
+          build-args: |
+            POSTGRES_MAJOR=${{ matrix.pg_version }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
