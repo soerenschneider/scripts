@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.2](https://github.com/soerenschneider/scripts/compare/v1.0.1...v1.0.2) (2025-02-18)
+
+
+### Miscellaneous Chores
+
+* release 1.0.1 ([0114a00](https://github.com/soerenschneider/scripts/commit/0114a009e13323e8b3a5bc893881d8763791a08c))
+* release 1.0.2 ([22a31d9](https://github.com/soerenschneider/scripts/commit/22a31d9993d3c28a3226095ace2674d9fe9a2e79))
+
 ## [1.0.1](https://github.com/soerenschneider/scripts/compare/v1.0.0...v1.0.1) (2025-02-18)
 
 
