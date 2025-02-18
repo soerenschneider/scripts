@@ -19,11 +19,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - dockerfile: ./restic/Dockerfile
+          - pg_version: "17"
             image: ghcr.io/soerenschneider/restic
-          - dockerfile: ./restic/Dockerfile-pg16
+          - pg_version: "16"
             image: ghcr.io/soerenschneider/restic-pg16
-          - dockerfile: ./restic/Dockerfile-pg15
+          - pg_version: "15"
             image: ghcr.io/soerenschneider/restic-pg15
     permissions:
       contents: read
@@ -54,7 +54,8 @@ jobs:
         uses: docker/build-push-action@v6.11.0
         with:
           context: .
-          file: ${{ matrix.dockerfile }}
+          args:
+            - POSTGRES_MAJOR: ${{ matrix.pg_version }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
