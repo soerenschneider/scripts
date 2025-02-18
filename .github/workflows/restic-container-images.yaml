@@ -47,9 +47,14 @@ jobs:
         with:
           images: ${{ matrix.image }}
           tags: |
-            type=raw,value={{ branch}}-{{date 'YYYYMMDDHHmmss'}}
+            type=schedule
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
             type=ref,event=branch
             type=ref,event=pr
+            type=sha
+
 
       - name: Build and publish Docker image
         uses: docker/build-push-action@v6.13.0
