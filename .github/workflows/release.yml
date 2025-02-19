@@ -23,7 +23,7 @@ jobs:
       minor: ${{ steps.release.outputs.minor }}
       patch: ${{ steps.release.outputs.patch }}
     steps:
-      - uses: GoogleCloudPlatform/release-please-action@v4.1.3
+      - uses: googleapis/release-please-action@v4
         name: release
         id: release
         with:
