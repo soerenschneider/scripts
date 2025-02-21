@@ -104,7 +104,7 @@ jobs:
       - name: Build and publish Docker image
         uses: docker/build-push-action@v6.13.0
         with:
-          context: .
+          context: restic
           build-args: |
             POSTGRES_MAJOR=${{ matrix.pg_version }}
           push: true
