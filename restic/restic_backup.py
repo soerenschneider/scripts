@@ -120,21 +120,18 @@ class PostgresDbBackup(BackupImpl):
         if self._container_name:
             pg_dump_cmd = ["docker", "exec", self._container_name] + pg_dump_cmd
 
-        p1 = subprocess.Popen(pg_dump_cmd, stdout=subprocess.PIPE)
-
-        gzip_cmd = ["gzip", "--rsyncable"]
-        p2 = subprocess.Popen(gzip_cmd, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        p1 = subprocess.Popen(pg_dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         restic_cmd = ["restic", "--json"]
         if self._hostname:
             restic_cmd.append(f"--host={self._hostname}")
         restic_cmd += ["backup", "--compression=max", "--stdin", "--stdin-filename", "database_dump.sql"]
 
-        p3 = subprocess.Popen(restic_cmd, stdin=p2.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        p2 = subprocess.Popen(restic_cmd, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        stdout, stderr = p3.communicate()
-        p3.wait(BACKUP_TIMEOUT_SECONDS)
-        if p3.returncode != 0:
+        stdout, stderr = p2.communicate()
+        p2.wait(BACKUP_TIMEOUT_SECONDS)
+        if p2.returncode != 0:
             logging.error("Backup was not successful: %s", stderr)
             raise ResticError(stderr)
 
