@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.0](https://github.com/soerenschneider/scripts/compare/v1.0.1...v1.1.0) (2025-03-06)
+
+
+### Features
+
+* add more metrics and print output as table ([9f1a593](https://github.com/soerenschneider/scripts/commit/9f1a59325e7d468c2a0e39ba543b743afcea02ba))
+* option to keep years ([6d48b26](https://github.com/soerenschneider/scripts/commit/6d48b26296f0e262ed33fbeec14690b9cc49ea5f))
+* use restic's compression ([e2d87b6](https://github.com/soerenschneider/scripts/commit/e2d87b67a749e356ea79db1b82c606c1ec57a4e9))
+
+
+### Bug Fixes
+
+* **deps:** update dependency jinja2 to v3.1.6 [security] ([36734ce](https://github.com/soerenschneider/scripts/commit/36734ce02ce05da1f6481b5669cfa106746164d8))
+* **deps:** update dependency jinja2 to v3.1.6 [security] ([da6a4a0](https://github.com/soerenschneider/scripts/commit/da6a4a05c552bf156a8a8054df13a02229efc73c))
+* **deps:** update golang docker tag to v1.24.1 ([ad61a8d](https://github.com/soerenschneider/scripts/commit/ad61a8d7111ddd97337988bffabd7ba5b8525f6c))
+* **deps:** update golang docker tag to v1.24.1 ([dafa1e9](https://github.com/soerenschneider/scripts/commit/dafa1e9627e79991d362c0d0ed5c91a4eb408a1d))
+* use local timestamp ([d2e700a](https://github.com/soerenschneider/scripts/commit/d2e700a885142f1485eee8c7cb54950f87dc0743))
+
 ## [1.0.1](https://github.com/soerenschneider/scripts/compare/v1.0.0...v1.0.1) (2025-02-21)
 
 
