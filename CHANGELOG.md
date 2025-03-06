@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/soerenschneider/scripts/compare/v1.1.0...v1.1.1) (2025-03-06)
+
+
+### Bug Fixes
+
+* revert rust to 1.84.1 ([48e5c20](https://github.com/soerenschneider/scripts/commit/48e5c203b79c139cf7dc53c2c2e65c377b661fa7))
+
 ## [1.1.0](https://github.com/soerenschneider/scripts/compare/v1.0.1...v1.1.0) (2025-03-06)
 
 
