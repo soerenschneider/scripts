@@ -12,7 +12,7 @@ import subprocess
 
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Any, Dict
 
 import requests
 
@@ -124,6 +124,15 @@ def format_data(output: dict, identifier: str, success: bool, start_time: dateti
     buffer.write(f'# TYPE {METRIC_PREFIX}_start_time_seconds gauge\n')
     buffer.write(f'{METRIC_PREFIX}_start_time_seconds{{repo="{identifier}"}} {start_time.timestamp()}\n')
 
+    buffer.write(f'# HELP {METRIC_PREFIX}_snapshots_total Snapshots by host\n')
+    buffer.write(f'# TYPE {METRIC_PREFIX}_snapshots_total gauge\n')
+    buffer.write(f'# HELP {METRIC_PREFIX}_snapshots_removed_total Snapshots removed\n')
+    buffer.write(f'# TYPE {METRIC_PREFIX}_snapshots_removed_total gauge\n')
+    metric_data = parse_metrics(output)
+    for host_data in metric_data:
+        buffer.write(f'{METRIC_PREFIX}_snapshots_total{{repo="{identifier}",host=\"{host_data["host"]}\"}} {host_data["keep"]}\n')
+        buffer.write(f'{METRIC_PREFIX}_snapshots_removed_total{{repo="{identifier}",host=\"{host_data["host"]}\"}} {host_data["remove"]}\n')
+
     return buffer
 
 
@@ -162,8 +171,87 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def humanize_bytes(byte_value: int) -> str:
+    """ Function to humanize byte values """
+    if byte_value is None:
+        return "0 B"
+
+    units = ["B", "KB", "MB", "GB", "TB", "PB"]
+    size = byte_value
+    unit = 0
+
+    while size >= 1024 and unit < len(units) - 1:
+        size /= 1024.0
+        unit += 1
+
+    return f"{size:.2f} {units[unit]}"
+
+
+def parse_json(parsed_data: List[Dict[str, Any]]) -> List[List[Any]]:
+    parsed_results = []
+
+    for host in parsed_data:
+        for item in host["keep"]:
+            summary = item.get('summary', {})
+            time = item.get('time')
+            hostname = item.get('hostname')
+            files_new = summary.get('files_new')
+            files_changed = summary.get('files_changed')
+            data_added = humanize_bytes(summary.get('data_added'))
+            data_added_packed = humanize_bytes(summary.get('data_added_packed'))
+            total_files_processed = summary.get('total_files_processed')
+            total_bytes_processed = humanize_bytes(summary.get('total_bytes_processed'))
+
+            # Add the extracted data to the list
+            parsed_results.append([
+                time, hostname, files_new, files_changed, data_added,
+                data_added_packed, total_files_processed, total_bytes_processed
+            ])
+
+    parsed_results.sort(key=lambda x: datetime.fromisoformat(x[0].replace("Z", "+00:00")), reverse=True)
+    return parsed_results
+
+
+def print_table(data: List[List[Any]]) -> None:
+    headers = ["Time", "Hostname", "Files New", "Files Changed", "Data Added", "Data Added Packed", "Total Files Processed", "Total Bytes Processed"]
+
+    # Calculate the width for each column based on the longest value
+    column_widths = [max(len(header), max(len(str(item[i])) for item in data)) for i, header in enumerate(headers)]
+
+    # Print header row
+    header_row = " | ".join(f"{header:<{column_widths[i]}}" for i, header in enumerate(headers))
+    print(header_row)
+    print("-" * (sum(column_widths) + (len(headers) - 1) * 3))  # Print a separator line
+
+    # Print data rows
+    for row in data:
+        print(" | ".join(f"{str(item):<{column_widths[i]}}" for i, item in enumerate(row)))
+
+
+def parse_metrics(json_output) -> List:
+    metrics = []
+
+    for host in json_output:
+        metrics.append({
+            "host": host["host"],
+            "keep": 0 if not host["keep"] else len(host["keep"]),
+            "remove": 0 if not host["remove"] else len(host["remove"]),
+        })
+
+    return metrics
+
+
+def setup_logging(debug=False) -> None:
+    """ Set up the logging configuration. """
+    loglevel = logging.INFO
+    if debug:
+        loglevel = logging.DEBUG
+    logging.basicConfig(level=loglevel, format="%(asctime)s %(levelname)s %(message)s")
+
+
 def main() -> None:
     """ Main does mainly main things. """
+    setup_logging()
     start_time = datetime.now()
     args = parse_args()
 
@@ -193,10 +281,12 @@ def main() -> None:
         target_dir = Path(args.metric_dir)
         write_metrics(metrics_data, target_dir, args.backup_id)
 
+    parsed_result = parse_json(json_output)
+    print_table(parsed_result)
+
     if not success:
         sys.exit(1)
 
 
 if __name__ == "__main__":
-    logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.INFO)
     main()
