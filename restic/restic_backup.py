@@ -451,7 +451,7 @@ def setup_logging(debug=False) -> None:
 def main() -> None:
     """ Runs restic. """
     setup_logging()
-    start_time = datetime.utcnow().timestamp()
+    start_time = datetime.now().timestamp()
     args = parse_args()
     success = False
     json_output = {}
