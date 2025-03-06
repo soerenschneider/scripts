@@ -36,6 +36,7 @@ INTERNAL_METRICS = {
 ENV_PRUNE_KEEP_DAYS = "RETENTION_DAYS"
 ENV_PRUNE_KEEP_WEEKS = "RETENTION_WEEKS"
 ENV_PRUNE_KEEP_MONTHS = "RETENTION_MONTHS"
+ENV_PRUNE_KEEP_YEARS = "RETENTION_YEARS"
 ENV_PUSHGATEWAY_URL = "PUSHGATEWAY_URL"
 ENV_METRIC_LABELS = "METRIC_LABELS"
 
@@ -46,22 +47,26 @@ class ResticError(Exception):
     pass
 
 
-def run_prune(repo: str, days=None, weeks=None, months=None) -> Optional[str]:
+def run_prune(repo: str, days=None, weeks=None, months=None, years=None) -> Optional[str]:
     """ Performs the backup operation. Returns the JSONified stdout of the restic backup call. """
 
     command = RESTIC_PRUNE_CMD + [repo]
     if days:
         if isinstance(days, int):
             days = str(days)
-        command += ["-d", days]
+        command += [f"--keep-daily={days}"]
     if weeks:
         if isinstance(weeks, int):
             weeks = str(weeks)
-        command += ["-w", weeks]
+        command += [f"--keep-weekly={weeks}"]
     if months:
         if isinstance(months, int):
             months = str(months)
-        command += ["-m", months]
+        command += [f"--keep-monthly={months}"]
+    if years:
+        if isinstance(years, int):
+            years = str(years)
+        command += [f"--keep-yearly={years}"]
 
     logging.info("Starting restic prune using command: %s", command)
     with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
@@ -149,6 +154,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-d", "--daily", default=os.environ.get(ENV_PRUNE_KEEP_DAYS), help="The amount of daily backups to keep")
     parser.add_argument("-w", "--weekly", default=os.environ.get(ENV_PRUNE_KEEP_WEEKS), help="The amount of weekly backups to keep")
     parser.add_argument("-m", "--monthly", default=os.environ.get(ENV_PRUNE_KEEP_MONTHS), help="The amount of monthly backups to keep")
+    parser.add_argument("-y", "--yearly", default=os.environ.get(ENV_PRUNE_KEEP_YEARS), help="The amount of yearly backups to keep")
     parser.add_argument("-i", "--id", dest="backup_id", default=os.environ.get("RESTIC_BACKUP_ID"), help="An identifier for this backup")
     parser.add_argument("-M", "--metric-dir", default="/var/lib/node_exporter", help="Dir to write metrics to")
     parser.add_argument("-p", "--pushgateway-url", default=os.environ.get(ENV_PUSHGATEWAY_URL), help="Prometheus Pushgateway URL to send metrics to")
