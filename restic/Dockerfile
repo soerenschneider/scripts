@@ -49,7 +49,7 @@ ARG USER_UID=16523
 ARG USER_GID=$USER_UID
 ARG POSTGRES_MAJOR=17
 
-RUN apk add --no-cache python3 py-pip gzip mariadb-client postgresql${POSTGRES_MAJOR}-client
+RUN apk add --no-cache python3 py-pip gzip mariadb-client postgresql${POSTGRES_MAJOR}-client sqlite
 
 # runtime dependencies for taskwarrior
 RUN apk add --no-cache \

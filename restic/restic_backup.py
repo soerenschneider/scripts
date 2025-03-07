@@ -35,6 +35,7 @@ ENV_POSTGRES_CONTAINER_NAME = "POSTGRES_CONTAINER_NAME"
 ENV_POSTGRES_PASSWORD = "POSTGRES_PASSWORD"
 ENV_POSTGRES_HOST = "POSTGRES_HOST"
 ENV_POSTGRES_USER = "POSTGRES_USER"
+ENV_SQLITE_FILE = "SQLITE_FILE"
 
 ARG_SPLIT_TOKEN = ","
 
@@ -77,6 +78,46 @@ class ResticError(Exception):
 class BackupImpl(ABC):
     def run_backup(self) -> Optional[List[bytes]]:
         pass
+
+
+class SqliteBackup(BackupImpl):
+    def __init__(self,
+                 sqlite_file: str = None,
+                 hostname: str = None):
+
+        if not sqlite_file:
+            self._sqlite_file = os.getenv(ENV_SQLITE_FILE)
+        else:
+            self._sqlite_file = sqlite_file
+
+        if not self._sqlite_file:
+            raise ValueError("no sqlite_file supplied")
+
+        if not hostname:
+            self._hostname = os.getenv(ENV_RESTIC_HOSTNAME)
+        else:
+            self._hostname = hostname
+
+    def run_backup(self) -> Optional[List[bytes]]:
+        dump_cmd = ["sqlite3", self._sqlite_file, ".dump"]
+
+        p1 = subprocess.Popen(dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        restic_cmd = ["restic", "--json"]
+        if self._hostname:
+            restic_cmd.append(f"--host={self._hostname}")
+        restic_cmd += ["backup", "--compression=max", "--stdin", "--stdin-filename", "database_dump.sql"]
+
+        p2 = subprocess.Popen(restic_cmd, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        stdout, stderr = p2.communicate()
+        p2.wait(BACKUP_TIMEOUT_SECONDS)
+        if p2.returncode != 0:
+            logging.error("Backup was not successful: %s", stderr)
+            raise ResticError(stderr)
+
+        logging.info("Backup was successful!")
+        return stdout.splitlines()[-1]
 
 
 class PostgresDbBackup(BackupImpl):
@@ -399,6 +440,10 @@ def get_backup_impl(args: argparse.Namespace) -> BackupImpl:
     if not args.type:
         logging.warning("no backup type specified, falling back to 'directory'")
         args.type = "directory"
+
+    if args.type.lower() == "sqlite":
+        logging.info("Using 'sqlite' backup impl")
+        return SqliteBackup()
 
     if args.type.lower() == "postgres":
         logging.info("Using 'postgres' backup impl")
