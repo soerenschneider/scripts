@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/soerenschneider/scripts/compare/v1.1.1...v1.2.0) (2025-03-07)
+
+
+### Features
+
+* add support for sqlite ([3ce1579](https://github.com/soerenschneider/scripts/commit/3ce15796acc098ae78cb165550d5839788563da8))
+
 ## [1.1.1](https://github.com/soerenschneider/scripts/compare/v1.1.0...v1.1.1) (2025-03-06)
 
 

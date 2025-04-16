@@ -1,4 +1,4 @@
-FROM golang:1.24.1 AS restic
+FROM golang:1.24.2 AS restic
 
 # renovate: datasource=github-releases depName=restic/restic
 ARG RESTIC_VERSION=v0.17.3
@@ -31,7 +31,7 @@ RUN apk add --no-cache \
 WORKDIR /taskwarrior
 
 # renovate: datasource=github-releases depName=GothenburgBitFactory/taskwarrior
-ARG TASKWARRIOR_VERSION=v3.3.0
+ARG TASKWARRIOR_VERSION=v3.4.1
 RUN git clone https://github.com/GothenburgBitFactory/taskwarrior.git . && \
     git -C /taskwarrior checkout ${TASKWARRIOR_VERSION}
 
