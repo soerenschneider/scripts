@@ -129,7 +129,10 @@ class AssetUploader:
         headers = {
             'Authorization': f'Bearer {self.token}',
         }
-        url = f"https://api.github.com/repos/{self.owner}/{self.repo}/releases/{tag}"
+        if tag == "latest":
+            url = f"https://api.github.com/repos/{self.owner}/{self.repo}/releases/latest"
+        else:
+            url = f"https://api.github.com/repos/{self.owner}/{self.repo}/releases/tags/{tag}"
         resp = requests.get(url=url, headers=headers)
 
         if resp.status_code == 200:
