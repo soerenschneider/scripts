@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.2.1](https://github.com/soerenschneider/scripts/compare/v1.2.0...v1.2.1) (2025-04-16)
+
+
+### Bug Fixes
+
+* **deps:** bump boto3 from 1.36.22 to 1.37.33 ([73905c7](https://github.com/soerenschneider/scripts/commit/73905c7dd2d4aed8aa385d67594bb2b71291d4b5))
+* **deps:** bump boto3 from 1.36.22 to 1.37.33 ([af19a58](https://github.com/soerenschneider/scripts/commit/af19a58f2d4cea8cbf064843e50ba245340b6432))
+* **deps:** bump hashicorp/vault from 1.18.4 to 1.19.1 ([9870658](https://github.com/soerenschneider/scripts/commit/98706580b9fd6182df3fc3ed7d3c984237ac1021))
+* **deps:** bump hashicorp/vault from 1.18.4 to 1.19.1 ([caba6b3](https://github.com/soerenschneider/scripts/commit/caba6b3ad0e79d568f287eccc23d1d50abb963a2))
+* **deps:** bump python from 3.13.2-slim to 3.13.3-slim ([0b45fe8](https://github.com/soerenschneider/scripts/commit/0b45fe896ffa3ee5db8345cddf23dc68192cf87a))
+* **deps:** bump python from 3.13.2-slim to 3.13.3-slim ([3fbde74](https://github.com/soerenschneider/scripts/commit/3fbde74dacf9df20c2fd81f41fedfaeaed487018))
+* **deps:** bump segno from 1.6.1 to 1.6.6 ([9fe491f](https://github.com/soerenschneider/scripts/commit/9fe491f92691337c5f00399201669dc98a157dce))
+* **deps:** bump segno from 1.6.1 to 1.6.6 ([96c5a99](https://github.com/soerenschneider/scripts/commit/96c5a99238ac116d0554caf6dd4eaa08247bf05f))
+* **deps:** update actions/checkout action to v4.2.2 ([679bbe3](https://github.com/soerenschneider/scripts/commit/679bbe32169922d1a5852b57a1b210dfa3589c75))
+* **deps:** update actions/checkout action to v4.2.2 ([fd3369d](https://github.com/soerenschneider/scripts/commit/fd3369d06b5a1c1707324f406ac161507ee6da19))
+* **deps:** update dependency gothenburgbitfactory/taskwarrior to v3.4.1 ([ad8d2bf](https://github.com/soerenschneider/scripts/commit/ad8d2bfb6c4f2aac442f9ad2f2f12585b6902ccb))
+* **deps:** update dependency gothenburgbitfactory/taskwarrior to v3.4.1 ([0956316](https://github.com/soerenschneider/scripts/commit/0956316606c2e5a055f7404f71f8c47268076abf))
+* **deps:** update dependency restic/restic to v0.18.0 ([c7b4f2a](https://github.com/soerenschneider/scripts/commit/c7b4f2ab4c71610aed4d789ef63d80a818793012))
+* **deps:** update dependency restic/restic to v0.18.0 ([fad398f](https://github.com/soerenschneider/scripts/commit/fad398f96af9ea06d35554cbde89388698717ec4))
+* **deps:** update golang docker tag to v1.24.2 ([d723159](https://github.com/soerenschneider/scripts/commit/d7231595d89757f95e6f16e060da48dd914adbb2))
+* **deps:** update golang docker tag to v1.24.2 ([62e9919](https://github.com/soerenschneider/scripts/commit/62e9919e710173f4d53094b495247ba74a6fd3b4))
+* **deps:** update python docker tag to v3.13.3 ([c905e55](https://github.com/soerenschneider/scripts/commit/c905e554fc630328378c2cf42f00ec5897cadaf1))
+* **deps:** update python docker tag to v3.13.3 ([8bd71a6](https://github.com/soerenschneider/scripts/commit/8bd71a6b7ac2d1f32dbb82b6d11fef85f7783f4d))
+* fix url ([e10147e](https://github.com/soerenschneider/scripts/commit/e10147e0908a00a3257dbf1911d714057b1eb67c))
+
 ## [1.2.0](https://github.com/soerenschneider/scripts/compare/v1.1.1...v1.2.0) (2025-03-07)
 
 
