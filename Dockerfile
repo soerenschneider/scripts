@@ -1,4 +1,4 @@
-FROM hashicorp/vault:1.19.1 AS donor
+FROM hashicorp/vault:1.19.4 AS donor
 
 FROM python:3.13.3-slim AS final
 
