@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.2](https://github.com/soerenschneider/scripts/compare/v1.2.1...v1.2.2) (2025-06-04)
+
+
+### Bug Fixes
+
+* use correct datasource name ([c8efbc2](https://github.com/soerenschneider/scripts/commit/c8efbc2ab04adae087e01d424586b8aaab1209cb))
+
 ## [1.2.1](https://github.com/soerenschneider/scripts/compare/v1.2.0...v1.2.1) (2025-04-16)
 
 
