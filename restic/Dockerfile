@@ -42,7 +42,7 @@ RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release . && \
 
 FROM alpine:3.21.3
 
-# renovate: datasource=pip depName=requests
+# renovate: datasource=pypi depName=requests
 ARG REQUESTS_VERSION=2.31.0
 ARG USERNAME=restic
 ARG USER_UID=16523
