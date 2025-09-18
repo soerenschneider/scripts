@@ -33,6 +33,7 @@ ENV_MARIADB_USER = "MARIADB_USER"
 ENV_MARIADB_HOST = "MARIADB_HOST"
 ENV_POSTGRES_CONTAINER_NAME = "POSTGRES_CONTAINER_NAME"
 ENV_POSTGRES_PASSWORD = "POSTGRES_PASSWORD"
+ENV_POSTGRES_DATABASE_NAME = "POSTGRES_DATABASE_NAME"
 ENV_POSTGRES_HOST = "POSTGRES_HOST"
 ENV_POSTGRES_USER = "POSTGRES_USER"
 ENV_SQLITE_FILE = "SQLITE_FILE"
@@ -126,7 +127,8 @@ class PostgresDbBackup(BackupImpl):
                  password: str = None,
                  postgres_host: str = None,
                  hostname: str = None,
-                 container_name: str = None):
+                 container_name: str = None,
+                 database_name: str = None):
 
         if not user:
             self._user = os.getenv(ENV_POSTGRES_USER)
@@ -153,8 +155,16 @@ class PostgresDbBackup(BackupImpl):
         else:
             self._container_name = container_name
 
+        if not database_name:
+            self._database_name = os.getenv(ENV_POSTGRES_DATABASE_NAME)
+        else:
+            self._database_name = database_name
+
     def run_backup(self) -> Optional[List[bytes]]:
         pg_dump_cmd = ["pg_dumpall", "--clean", f"--username={self._user}"]
+        if self._database_name:
+            pg_dump_cmd = ["pg_dump", "--clean", f"--username={self._user}"]
+
         if self._postgres_host:
             pg_dump_cmd.append(f"--host={self._postgres_host}")
 
