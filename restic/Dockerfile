@@ -40,7 +40,7 @@ RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release . && \
     cmake --build build -j 8 && \
     cmake --install build
 
-FROM alpine:3.21.3
+FROM alpine:3.22.1
 
 # renovate: datasource=pypi depName=requests
 ARG REQUESTS_VERSION=2.31.0
