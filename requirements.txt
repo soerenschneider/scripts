@@ -1,6 +1,6 @@
 # ansible
 pyyaml==6.0.2
-lineinfile==0.4.1
+lineinfile==0.4.2
 
 # aws
 boto3==1.40.30
