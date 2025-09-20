@@ -25,6 +25,9 @@ ENV_RESTIC_BACKUP_ID = "RESTIC_BACKUP_ID"
 ENV_RESTIC_EXCLUDE_ITEMS = "RESTIC_EXCLUDE_ITEMS"
 ENV_RESTIC_TYPE = "_RESTIC_TYPE"
 ENV_RESTIC_HOSTNAME = "RESTIC_HOSTNAME"
+# restic stdin filename is relevant when backing up a database (sqlite, postgres, mariadb).
+# in this case, the backup is streamed via pipe
+ENV_RESTIC_STDIN_FILENAME = "RESTIC_STDIN_FILENAME"
 ENV_PUSHGATEWAY_URL = "PUSHGATEWAY_URL"
 ENV_METRIC_LABELS = "METRIC_LABELS"
 ENV_MARIADB_CONTAINER_NAME = "MARIADB_CONTAINER_NAME"
@@ -43,6 +46,7 @@ ARG_SPLIT_TOKEN = ","
 # time to wait for the backup process to finish until cancelling it
 BACKUP_TIMEOUT_SECONDS = 7200
 
+DEFAULT_STDIN_FILENAME = "database_dump.sql"
 DEFAULT_JOB_NAME = "restic-backup"
 
 # prefix for all the metrics we're writing
@@ -84,10 +88,11 @@ class BackupImpl(ABC):
 class SqliteBackup(BackupImpl):
     def __init__(self,
                  sqlite_file: str = None,
-                 hostname: str = None):
+                 hostname: str = None,
+                 stdin_filename: str = None):
 
         if not sqlite_file:
-            self._sqlite_file = os.getenv(ENV_SQLITE_FILE)
+            self._sqlite_file = getFromEnv(ENV_SQLITE_FILE)
         else:
             self._sqlite_file = sqlite_file
 
@@ -95,9 +100,14 @@ class SqliteBackup(BackupImpl):
             raise ValueError("no sqlite_file supplied")
 
         if not hostname:
-            self._hostname = os.getenv(ENV_RESTIC_HOSTNAME)
+            self._hostname = getFromEnv(ENV_RESTIC_HOSTNAME)
         else:
             self._hostname = hostname
+
+        if not stdin_filename:
+            self._restic_stdin_filename = getFromEnv(ENV_RESTIC_STDIN_FILENAME, default=DEFAULT_STDIN_FILENAME)
+        else:
+            self._restic_stdin_filename = stdin_filename
 
     def run_backup(self) -> Optional[List[bytes]]:
         dump_cmd = ["sqlite3", self._sqlite_file, ".dump"]
@@ -107,7 +117,7 @@ class SqliteBackup(BackupImpl):
         restic_cmd = ["restic", "--json"]
         if self._hostname:
             restic_cmd.append(f"--host={self._hostname}")
-        restic_cmd += ["backup", "--compression=max", "--stdin", "--stdin-filename", "database_dump.sql"]
+        restic_cmd += ["backup", "--compression=max", "--stdin", "--stdin-filename", self._restic_stdin_filename]
 
         p2 = subprocess.Popen(restic_cmd, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -128,42 +138,48 @@ class PostgresDbBackup(BackupImpl):
                  postgres_host: str = None,
                  hostname: str = None,
                  container_name: str = None,
-                 database_name: str = None):
+                 database_name: str = None,
+                 stdin_filename: str = None):
 
         if not user:
-            self._user = os.getenv(ENV_POSTGRES_USER)
+            self._user = getFromEnv(ENV_POSTGRES_USER)
         else:
             self._user = user
 
         if not password:
-            self._password = os.getenv(ENV_POSTGRES_PASSWORD)
+            self._password = getFromEnv(ENV_POSTGRES_PASSWORD, True)
         else:
             self._password = password
 
         if not postgres_host:
-            self._postgres_host = os.getenv(ENV_POSTGRES_HOST)
+            self._postgres_host = getFromEnv(ENV_POSTGRES_HOST)
         else:
             self._postgres_host = postgres_host
 
         if not hostname:
-            self._hostname = os.getenv(ENV_RESTIC_HOSTNAME)
+            self._hostname = getFromEnv(ENV_RESTIC_HOSTNAME)
         else:
             self._hostname = hostname
 
         if not container_name:
-            self._container_name = os.getenv(ENV_POSTGRES_CONTAINER_NAME)
+            self._container_name = getFromEnv(ENV_POSTGRES_CONTAINER_NAME)
         else:
             self._container_name = container_name
 
         if not database_name:
-            self._database_name = os.getenv(ENV_POSTGRES_DATABASE_NAME)
+            self._database_name = getFromEnv(ENV_POSTGRES_DATABASE_NAME)
         else:
             self._database_name = database_name
+
+        if not stdin_filename:
+            self._restic_stdin_filename = getFromEnv(ENV_RESTIC_STDIN_FILENAME, default=DEFAULT_STDIN_FILENAME)
+        else:
+            self._restic_stdin_filename = stdin_filename
 
     def run_backup(self) -> Optional[List[bytes]]:
         pg_dump_cmd = ["pg_dumpall", "--clean", f"--username={self._user}"]
         if self._database_name:
-            pg_dump_cmd = ["pg_dump", "--clean", f"--username={self._user}"]
+            pg_dump_cmd = ["pg_dump", "--clean", f"--username={self._user}", f"--dbname={self._database_name}"]
 
         if self._postgres_host:
             pg_dump_cmd.append(f"--host={self._postgres_host}")
@@ -171,24 +187,37 @@ class PostgresDbBackup(BackupImpl):
         if self._container_name:
             pg_dump_cmd = ["docker", "exec", self._container_name] + pg_dump_cmd
 
+        logging.info("Running backup cmd '%s'", " ".join(pg_dump_cmd))
         p1 = subprocess.Popen(pg_dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         restic_cmd = ["restic", "--json"]
         if self._hostname:
             restic_cmd.append(f"--host={self._hostname}")
-        restic_cmd += ["backup", "--compression=max", "--stdin", "--stdin-filename", "database_dump.sql"]
+        restic_cmd += ["backup", "--compression=max", "--stdin", "--stdin-filename", self._restic_stdin_filename]
 
         p2 = subprocess.Popen(restic_cmd, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         stdout, stderr = p2.communicate()
         p2.wait(BACKUP_TIMEOUT_SECONDS)
         if p2.returncode != 0:
-            logging.error("Backup was not successful: %s", stderr)
+            logging.error("Backup was not successful: %s",  stderr)
             raise ResticError(stderr)
 
         logging.info("Backup was successful!")
         return stdout.splitlines()[-1]
 
+
+def getFromEnv(env_var: str, secret: bool = False, default: str = None) -> str:
+    """ Returns the value of the environment variable or raises an error if it's not set. """
+    value = os.getenv(env_var)
+    if value:
+        if secret:
+            logging.info("Using value '%s' for env var '%s'", "***", env_var)
+        else:
+            logging.info("Using value '%s' for env var '%s'", value, env_var)
+    elif default:
+        return default
+    return value
 
 class MariaDbBackup(BackupImpl):
     def __init__(self,
@@ -196,31 +225,37 @@ class MariaDbBackup(BackupImpl):
                  user: str = None,
                  password: str = None,
                  hostname: str = None,
-                 container_name: str = None):
+                 container_name: str = None,
+                 stdin_filename: str = None):
         if not host:
-            self._mariadb_host = os.getenv(ENV_MARIADB_HOST)
+            self._mariadb_host = getFromEnv(ENV_MARIADB_HOST)
         else:
             self._mariadb_host = host
 
         if not user:
-            self._user = os.getenv(ENV_MARIADB_USER)
+            self._user = getFromEnv(ENV_MARIADB_USER)
         else:
             self._user = user
 
         if not password:
-            self._password = os.getenv(ENV_MARIADB_PASSWORD)
+            self._password = getFromEnv(ENV_MARIADB_PASSWORD, True)
         else:
             self._password = password
 
         if not hostname:
-            self._hostname = os.getenv(ENV_RESTIC_HOSTNAME)
+            self._hostname = getFromEnv(ENV_RESTIC_HOSTNAME)
         else:
             self._hostname = hostname
 
         if not container_name:
-            self._container_name = os.getenv(ENV_MARIADB_CONTAINER_NAME)
+            self._container_name = getFromEnv(ENV_MARIADB_CONTAINER_NAME)
         else:
             self._container_name = container_name
+
+        if not stdin_filename:
+            self._restic_stdin_filename = getFromEnv(ENV_RESTIC_STDIN_FILENAME, default=DEFAULT_STDIN_FILENAME)
+        else:
+            self._restic_stdin_filename = stdin_filename
 
     def run_backup(self) -> Optional[List[bytes]]:
         if not os.getenv("MYSQL_PWD"):
@@ -240,7 +275,7 @@ class MariaDbBackup(BackupImpl):
         restic_cmd = ["restic", "--compression=max", "--json", "backup", "--stdin", "--stdin-filename"]
         if self._hostname:
             restic_cmd.append(f"--host={self._hostname}")
-        restic_cmd.append("database_dump.sql")
+        restic_cmd.append(self._restic_stdin_filename)
 
         p2 = subprocess.Popen(restic_cmd, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
