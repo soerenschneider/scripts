@@ -37,6 +37,7 @@ ENV_MARIADB_USER = "MARIADB_USER"
 ENV_MARIADB_HOST = "MARIADB_HOST"
 ENV_POSTGRES_CONTAINER_NAME = "POSTGRES_CONTAINER_NAME"
 ENV_POSTGRES_PASSWORD = "POSTGRES_PASSWORD"
+ENV_POSTGRES_PASSWORD_ALT = "PGPASSWORD"
 ENV_POSTGRES_PASSWORD_FILE = "POSTGRES_PASSWORD_FILE"
 ENV_POSTGRES_DATABASE_NAME = "POSTGRES_DATABASE_NAME"
 ENV_POSTGRES_HOST = "POSTGRES_HOST"
@@ -149,18 +150,23 @@ class PostgresDbBackup(BackupImpl):
         else:
             self._user = user
 
-        if password_file and password or getFromEnv(ENV_POSTGRES_PASSWORD) and getFromEnv(ENV_POSTGRES_PASSWORD_FILE):
+        if not password:
+            password = getFromEnv(ENV_POSTGRES_PASSWORD, secret=True) or getFromEnv(ENV_POSTGRES_PASSWORD_ALT, secret=True)
+
+        if not password_file:
+            password_file = getFromEnv(ENV_POSTGRES_PASSWORD_FILE)
+
+        if password_file and password:
             raise ValueError("password and password_file are mutually exclusive")
 
-        if not (password_file or password or getFromEnv(ENV_POSTGRES_PASSWORD) or getFromEnv(ENV_POSTGRES_PASSWORD_FILE)):
+        if not (password_file or password):
             raise ValueError("neither password nor password_file provided")
 
-        self._password = password or getFromEnv(ENV_POSTGRES_PASSWORD, True)
-        if not self._password:
-            password_file = password_file or getFromEnv(ENV_POSTGRES_PASSWORD_FILE)
-            if password_file:
-                with open(password_file, "r") as fd:
-                    self._password = fd.read().strip()
+        if password:
+            self._password = password
+        else:
+            with open(password_file, "r") as fd:
+                self._password = fd.read().strip()
 
         if not postgres_host:
             self._postgres_host = getFromEnv(ENV_POSTGRES_HOST)
@@ -249,18 +255,23 @@ class MariaDbBackup(BackupImpl):
         else:
             self._user = user
 
-        if password_file and password or getFromEnv(ENV_MARIADB_PASSWORD) and getFromEnv(ENV_MARIADB_PASSWORD_FILE):
+        if not password:
+            password = getFromEnv(ENV_MARIADB_PASSWORD, secret=True)
+
+        if not password_file:
+            password_file = getFromEnv(ENV_MARIADB_PASSWORD_FILE)
+
+        if password_file and password:
             raise ValueError("password and password_file are mutually exclusive")
 
-        if not (password_file or password or getFromEnv(ENV_MARIADB_PASSWORD) or getFromEnv(ENV_MARIADB_PASSWORD_FILE)):
+        if not (password_file or password):
             raise ValueError("neither password nor password_file provided")
 
-        self._password = password or getFromEnv(ENV_MARIADB_PASSWORD, True)
-        if not self._password:
-            password_file = password_file or getFromEnv(ENV_MARIADB_PASSWORD_FILE)
-            if password_file:
-                with open(password_file, "r") as fd:
-                    self._password = fd.read().strip()
+        if password:
+            self._password = password
+        else:
+            with open(password_file, "r") as fd:
+                self._password = fd.read().strip()
 
         if not hostname:
             self._hostname = getFromEnv(ENV_RESTIC_HOSTNAME)
