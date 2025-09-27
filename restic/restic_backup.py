@@ -590,7 +590,7 @@ def main() -> None:
     pushgateway_success = False
     if args.pushgateway_url:
         try:
-            push_metrics(args.pushgateway_url, metrics_data)
+            push_metrics(args.pushgateway_url, metrics_data, args.backup_id)
             pushgateway_success = True
         except requests.exceptions.HTTPError as e:
             logging.error(f"Could not push metrics to pushgateway {args.pushgateway_url}: %s", e)
