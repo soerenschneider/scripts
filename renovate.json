@@ -14,11 +14,16 @@
   },
   "packageRules": [
     {
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "groupName": "GitHub Actions Updates",
+      "automerge": true
+    },
+    {
       "matchDatasources": ["docker"],
-      "updateTypes": [
-        "minor",
-        "patch"
-      ]
+      "matchUpdateTypes": ["patch", "minor"],
+      "groupName": "Docker Updates",
+      "automerge": true
     }
   ],
   "customManagers": [
