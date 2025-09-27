@@ -32,10 +32,12 @@ ENV_PUSHGATEWAY_URL = "PUSHGATEWAY_URL"
 ENV_METRIC_LABELS = "METRIC_LABELS"
 ENV_MARIADB_CONTAINER_NAME = "MARIADB_CONTAINER_NAME"
 ENV_MARIADB_PASSWORD = "MARIADB_PASSWORD"
+ENV_MARIADB_PASSWORD_FILE = "MARIADB_PASSWORD_FILE"
 ENV_MARIADB_USER = "MARIADB_USER"
 ENV_MARIADB_HOST = "MARIADB_HOST"
 ENV_POSTGRES_CONTAINER_NAME = "POSTGRES_CONTAINER_NAME"
 ENV_POSTGRES_PASSWORD = "POSTGRES_PASSWORD"
+ENV_POSTGRES_PASSWORD_FILE = "POSTGRES_PASSWORD_FILE"
 ENV_POSTGRES_DATABASE_NAME = "POSTGRES_DATABASE_NAME"
 ENV_POSTGRES_HOST = "POSTGRES_HOST"
 ENV_POSTGRES_USER = "POSTGRES_USER"
@@ -135,6 +137,7 @@ class PostgresDbBackup(BackupImpl):
     def __init__(self,
                  user: str = None,
                  password: str = None,
+                 password_file: str = None,
                  postgres_host: str = None,
                  hostname: str = None,
                  container_name: str = None,
@@ -146,10 +149,18 @@ class PostgresDbBackup(BackupImpl):
         else:
             self._user = user
 
-        if not password:
-            self._password = getFromEnv(ENV_POSTGRES_PASSWORD, True)
-        else:
-            self._password = password
+        if password_file and password or getFromEnv(ENV_POSTGRES_PASSWORD) and getFromEnv(ENV_POSTGRES_PASSWORD_FILE):
+            raise ValueError("password and password_file are mutually exclusive")
+
+        if not (password_file or password or getFromEnv(ENV_POSTGRES_PASSWORD) or getFromEnv(ENV_POSTGRES_PASSWORD_FILE)):
+            raise ValueError("neither password nor password_file provided")
+
+        self._password = password or getFromEnv(ENV_POSTGRES_PASSWORD, True)
+        if not self._password:
+            password_file = password_file or getFromEnv(ENV_POSTGRES_PASSWORD_FILE)
+            if password_file:
+                with open(password_file, "r") as fd:
+                    self._password = fd.read().strip()
 
         if not postgres_host:
             self._postgres_host = getFromEnv(ENV_POSTGRES_HOST)
@@ -224,6 +235,7 @@ class MariaDbBackup(BackupImpl):
                  host: str = None,
                  user: str = None,
                  password: str = None,
+                 password_file: str = None,
                  hostname: str = None,
                  container_name: str = None,
                  stdin_filename: str = None):
@@ -237,10 +249,18 @@ class MariaDbBackup(BackupImpl):
         else:
             self._user = user
 
-        if not password:
-            self._password = getFromEnv(ENV_MARIADB_PASSWORD, True)
-        else:
-            self._password = password
+        if password_file and password or getFromEnv(ENV_MARIADB_PASSWORD) and getFromEnv(ENV_MARIADB_PASSWORD_FILE):
+            raise ValueError("password and password_file are mutually exclusive")
+
+        if not (password_file or password or getFromEnv(ENV_MARIADB_PASSWORD) or getFromEnv(ENV_MARIADB_PASSWORD_FILE)):
+            raise ValueError("neither password nor password_file provided")
+
+        self._password = password or getFromEnv(ENV_MARIADB_PASSWORD, True)
+        if not self._password:
+            password_file = password_file or getFromEnv(ENV_MARIADB_PASSWORD_FILE)
+            if password_file:
+                with open(password_file, "r") as fd:
+                    self._password = fd.read().strip()
 
         if not hostname:
             self._hostname = getFromEnv(ENV_RESTIC_HOSTNAME)
