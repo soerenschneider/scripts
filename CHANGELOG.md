@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.3.0](https://github.com/soerenschneider/scripts/compare/v1.2.1...v1.3.0) (2025-09-18)
+
+
+### Features
+
+* allow dumping just single pg database ([4dd7ccb](https://github.com/soerenschneider/scripts/commit/4dd7ccb94325972a3ff0c0f334510c7e970b9c8c))
+
+
+### Bug Fixes
+
+* **deps:** bump boto3 from 1.37.33 to 1.40.30 ([681b0ce](https://github.com/soerenschneider/scripts/commit/681b0ce02860d7767de2abecdf243d2afd587e4e))
+* **deps:** bump boto3 from 1.37.33 to 1.40.30 ([70e2000](https://github.com/soerenschneider/scripts/commit/70e200060247380ab54711ac8ef3e511aa571536))
+* **deps:** bump hashicorp/vault from 1.19.1 to 1.20.3 ([a5374b5](https://github.com/soerenschneider/scripts/commit/a5374b58076f70308ce08c4afadbfb6961d1fc40))
+* **deps:** bump hashicorp/vault from 1.19.1 to 1.20.3 ([ccd6467](https://github.com/soerenschneider/scripts/commit/ccd646709eaa10f1f9d0f562a844cd6beb9a9b01))
+* **deps:** bump python from 3.13.3-slim to 3.13.7-slim ([0a3f8ca](https://github.com/soerenschneider/scripts/commit/0a3f8ca11cdc5fe8fe164cba434f82317eb29b0c))
+* **deps:** bump python from 3.13.3-slim to 3.13.7-slim ([0339ee1](https://github.com/soerenschneider/scripts/commit/0339ee1acdeeb42cdd5df90e6f176145e31d8662))
+* **deps:** bump requests from 2.32.3 to 2.32.5 ([98c089d](https://github.com/soerenschneider/scripts/commit/98c089d82ff4b87c4a9ddc6138eb6e280fa5c196))
+* **deps:** bump requests from 2.32.3 to 2.32.5 ([eb34e28](https://github.com/soerenschneider/scripts/commit/eb34e28c774bffe27cdad1713579682a4f54b4b7))
+* **deps:** update alpine docker tag to v3.22.1 ([f788af7](https://github.com/soerenschneider/scripts/commit/f788af70590e6e87cc7d29844eeb612ea9368b9c))
+* **deps:** update alpine docker tag to v3.22.1 ([c9612e7](https://github.com/soerenschneider/scripts/commit/c9612e7978d85c61c37102fa1fbda0ec7d7977fb))
+* **deps:** update dependency lineinfile to v0.4.2 ([5c71d1e](https://github.com/soerenschneider/scripts/commit/5c71d1eb7bbf4fd0a3d95e08bdb7d754fa32aa99))
+* **deps:** update dependency lineinfile to v0.4.2 ([0504945](https://github.com/soerenschneider/scripts/commit/05049459009632b3463ebf507259d93b38593e89))
+* **deps:** update golang docker tag to v1.25.1 ([148f394](https://github.com/soerenschneider/scripts/commit/148f3941cf7ba7456a69711edde2a167d980b541))
+* **deps:** update golang docker tag to v1.25.1 ([e2ec893](https://github.com/soerenschneider/scripts/commit/e2ec8939c7ea7c656a7bc0b1ec39af48af1a2454))
+* **deps:** update rust docker tag to v1.89.0 ([f842a5f](https://github.com/soerenschneider/scripts/commit/f842a5fd47602d236618537a388d66251e640cb2))
+* **deps:** update rust docker tag to v1.89.0 ([2572569](https://github.com/soerenschneider/scripts/commit/2572569adb24e379137db40dec15ad7515f78a9c))
+* use correct datasource name ([c8efbc2](https://github.com/soerenschneider/scripts/commit/c8efbc2ab04adae087e01d424586b8aaab1209cb))
+
 ## [1.2.1](https://github.com/soerenschneider/scripts/compare/v1.2.0...v1.2.1) (2025-04-16)
 
 

@@ -1,7 +1,7 @@
-FROM golang:1.24.2 AS restic
+FROM golang:1.25.1 AS restic
 
 # renovate: datasource=github-releases depName=restic/restic
-ARG RESTIC_VERSION=v0.18.0
+ARG RESTIC_VERSION=v0.18.1
 
 RUN apt update && \
     apt -y install git && \
@@ -11,7 +11,7 @@ RUN apt update && \
 WORKDIR /restic
 RUN CGO_ENABLED=0 go run helpers/build-release-binaries/main.go -p linux/amd64 --skip-compress
 
-FROM rust:1.84.1-alpine3.21 AS build-taskwarrior
+FROM rust:1.89.0-alpine3.21 AS build-taskwarrior
 
 # Install dependencies needed to build Taskwarrior
 RUN apk add --no-cache \
@@ -40,7 +40,7 @@ RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release . && \
     cmake --build build -j 8 && \
     cmake --install build
 
-FROM alpine:3.21.3
+FROM alpine:3.22.1
 
 # renovate: datasource=pypi depName=requests
 ARG REQUESTS_VERSION=2.31.0
