@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.4.0](https://github.com/soerenschneider/scripts/compare/v1.3.0...v1.4.0) (2025-09-27)
+
+
+### Features
+
+* add option to set stdin filename ([cf078da](https://github.com/soerenschneider/scripts/commit/cf078da776a608c67e7fd1f906bddaa4f09d215d))
+
+
+### Bug Fixes
+
+* **deps:** bump boto3 from 1.40.30 to 1.40.35 ([50a2d3a](https://github.com/soerenschneider/scripts/commit/50a2d3aeeb8d94c3b11fe85861d7cc35c11fca08))
+* **deps:** bump boto3 from 1.40.30 to 1.40.35 ([2169829](https://github.com/soerenschneider/scripts/commit/2169829f571e15d0be9b8fd3074f3ac79234838a))
+* **deps:** bump lineinfile from 0.4.1 to 0.4.2 ([0f294bc](https://github.com/soerenschneider/scripts/commit/0f294bc36da4eef92cb9ec8427740792c2de205a))
+* **deps:** update dependency pyyaml to v6.0.3 ([cca3afd](https://github.com/soerenschneider/scripts/commit/cca3afd0cfb243cd390485337f4f4d26633d83bf))
+* **deps:** update dependency pyyaml to v6.0.3 ([0f46fd7](https://github.com/soerenschneider/scripts/commit/0f46fd710a800f55376e518273dd0147ed480311))
+* **deps:** update dependency restic/restic to v0.18.1 ([657ca76](https://github.com/soerenschneider/scripts/commit/657ca76fcfd477d093c431e162ccac465d53f0e7))
+* **deps:** update dependency restic/restic to v0.18.1 ([e2d0899](https://github.com/soerenschneider/scripts/commit/e2d089947163434d9d2d3c6a047373ba3513f74a))
+* use backup_id for metrics to prevent all jobs using the same (fallback) id ([9ed771d](https://github.com/soerenschneider/scripts/commit/9ed771d953173ffe8ca8c49cd0a77f103ce46310))
+
 ## [1.3.0](https://github.com/soerenschneider/scripts/compare/v1.2.1...v1.3.0) (2025-09-18)
 
 
