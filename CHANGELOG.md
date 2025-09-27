@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/soerenschneider/scripts/compare/v1.4.0...v1.4.1) (2025-09-27)
+
+
+### Bug Fixes
+
+* improve logic for getting db password ([510f7bd](https://github.com/soerenschneider/scripts/commit/510f7bdfc44992a3e36baaad9f6fc46650dcdac6))
+
 ## [1.4.0](https://github.com/soerenschneider/scripts/compare/v1.3.0...v1.4.0) (2025-09-27)
 
 
