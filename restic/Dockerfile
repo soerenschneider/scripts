@@ -31,7 +31,7 @@ RUN apk add --no-cache \
 WORKDIR /taskwarrior
 
 # renovate: datasource=github-releases depName=GothenburgBitFactory/taskwarrior
-ARG TASKWARRIOR_VERSION=v3.4.1
+ARG TASKWARRIOR_VERSION=v3.4.2
 RUN git clone https://github.com/GothenburgBitFactory/taskwarrior.git . && \
     git -C /taskwarrior checkout ${TASKWARRIOR_VERSION}
 
